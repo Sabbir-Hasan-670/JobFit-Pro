@@ -1,0 +1,78 @@
+{
+  "manifest_version": 3,
+  "name": "JobFit Pro - AI Job Match Analyzer",
+  "version": "1.0.0",
+  "description": "AI-powered job match analyzer. Compare job descriptions with your CV, get match scores, skill gap analysis, ATS tips, and generate personalized cover letters.",
+  "author": "JobFit Pro",
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "JobFit Pro - AI Job Analyzer",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/*",
+        "https://www.indeed.com/*",
+        "https://www.glassdoor.com/job-listing/*",
+        "https://careers.google.com/*",
+        "https://jobs.lever.co/*",
+        "https://boards.greenhouse.io/*",
+        "https://www.dice.com/jobs/*",
+        "https://www.monster.com/*",
+        "https://www.ziprecruiter.com/jobs/*",
+        "https://*/*"
+      ],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.openai.com/*",
+    "https://*/*"
+  ],
+
+  "options_page": "settings/settings.html",
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup/*",
+        "settings/*",
+        "icons/*",
+        "utils/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

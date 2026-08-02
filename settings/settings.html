@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JobFit Pro — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+
+  <div class="page-wrapper">
+
+    <!-- HEADER -->
+    <header class="page-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="logo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="brand-name">JobFit Pro</div>
+            <div class="brand-sub">Settings & Configuration</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="page-main">
+
+      <!-- SAVE STATUS TOAST -->
+      <div class="toast" id="saveToast">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 12L11 14L15 10M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span id="toastMessage">Settings saved successfully!</span>
+      </div>
+
+      <!-- SECTION: API Configuration -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-icon api-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <h2 class="card-title">AI API Configuration</h2>
+            <p class="card-desc">Configure your Gemini or OpenAI API key to power the analysis.</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="apiProvider">
+            AI Provider
+            <span class="auto-detect-badge" id="autoDetectBadge" style="display:none;">⚡ Auto-detected</span>
+          </label>
+          <div class="select-wrapper">
+            <select class="form-select" id="apiProvider">
+              <option value="gemini">Google Gemini (Free & Recommended)</option>
+              <option value="openrouter">OpenRouter (Any AI Model: DeepSeek, Llama 3, Claude, GPT-4o)</option>
+              <option value="openai">OpenAI GPT-4</option>
+            </select>
+            <svg class="select-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- OPENROUTER CUSTOM MODEL SELECTOR (Shown when OpenRouter selected) -->
+        <div class="form-group" id="openrouterModelGroup" style="display:none;">
+          <label class="form-label" for="openrouterModel">
+            OpenRouter AI Model
+            <span class="form-hint">Search, select from dropdown, or type custom ID</span>
+          </label>
+
+          <!-- Search & Dropdown Picker -->
+          <div class="model-picker-container">
+            <div class="model-search-wrapper">
+              <div class="input-icon-left">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </div>
+              <input
+                type="text"
+                class="form-input model-search-input"
+                id="openrouterModel"
+                placeholder="Search or type model ID (e.g. openrouter/auto, gemma, gpt, claude)..."
+                value="openrouter/auto"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="button" class="btn-model-browse" id="toggleModelListBtn" title="Browse / Search all models">
+                <svg id="browseChevron" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+
+            <!-- Floating Searchable Catalog Dropdown -->
+            <div class="model-dropdown-catalog" id="modelDropdownCatalog" style="display:none;">
+              <div class="model-catalog-header">
+                <span class="catalog-title">✨ Popular & Free Models</span>
+                <button type="button" class="btn-fetch-models" id="fetchLiveModelsBtn" title="Fetch live models from OpenRouter API">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span id="fetchBtnText">Fetch Live</span>
+                </button>
+              </div>
+              <div class="model-list-scrollable" id="modelListScrollable">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Picks Badges -->
+          <div class="model-quick-picks">
+            <span class="quick-pick-tag active" data-model="openrouter/auto">🌐 Auto-Select (Best & Fast)</span>
+            <span class="quick-pick-tag" data-model="google/gemma-4-26b-a4b-it:free">⚡ Gemma 4 26B (Free)</span>
+            <span class="quick-pick-tag" data-model="nvidia/nemotron-3-nano-30b-a3b:free">🟢 Nemotron 30B (Free)</span>
+            <span class="quick-pick-tag" data-model="openai/gpt-oss-20b:free">🤖 GPT OSS (Free)</span>
+            <span class="quick-pick-tag" data-model="inclusionai/ling-3.0-flash:free">✨ Ling 3.0 (Free)</span>
+            <span class="quick-pick-tag" data-model="openai/gpt-4o-mini">🚀 GPT-4o Mini</span>
+            <span class="quick-pick-tag" data-model="anthropic/claude-3.5-sonnet">🎭 Claude 3.5 Sonnet</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="apiKey">
+            API Key
+            <span class="form-hint" id="apiKeyHint">Get your key from Google AI Studio</span>
+          </label>
+          <div class="input-wrapper">
+            <input
+              type="password"
+              class="form-input"
+              id="apiKey"
+              placeholder="Paste any Gemini or OpenAI key (auto-detected)..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="toggle-visibility" id="toggleApiKey" title="Show/hide key" aria-label="Toggle key visibility">
+              <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+          </div>
+
+          <div class="api-key-actions">
+            <div class="api-status-text" id="apiStatusText">No key saved</div>
+            <div class="action-btn-group">
+              <button type="button" class="text-btn" id="pasteApiKeyBtn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Paste
+              </button>
+              <button type="button" class="text-btn text-btn-danger" id="removeApiKeyBtn" style="display:none;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Remove Key
+              </button>
+            </div>
+          </div>
+
+          <p class="form-note">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Stored locally on your device. Auto-selects Gemini or OpenAI based on key format.
+          </p>
+        </div>
+      </section>
+
+      <!-- SECTION: CV / Resume -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-icon cv-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <h2 class="card-title">Your CV / Resume</h2>
+            <p class="card-desc">Paste the full text of your CV. The AI will use this to calculate match scores.</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cvText">
+            CV Content
+            <span class="char-count" id="charCount">0 characters</span>
+          </label>
+          <textarea
+            class="form-textarea"
+            id="cvText"
+            placeholder="Paste your full CV text here...
+
+Example:
+John Doe | Full Stack Developer
+Email: john@example.com | LinkedIn: linkedin.com/in/johndoe
+
+SKILLS
+JavaScript, React, Node.js, Python, SQL, Docker, AWS...
+
+EXPERIENCE
+Senior Developer at TechCorp (2020-2024)
+- Built scalable REST APIs serving 1M+ users...
+
+EDUCATION
+B.Sc. Computer Science, University of Tech, 2018"
+            rows="12"
+            spellcheck="false"
+          ></textarea>
+          <div class="textarea-actions">
+            <button class="text-btn" id="clearCvBtn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Clear
+            </button>
+            <button class="text-btn" id="pasteCvBtn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Paste from Clipboard
+            </button>
+          </div>
+        </div>
+
+        <div class="cv-stats" id="cvStats" style="display:none;">
+          <div class="stat-item">
+            <span class="stat-value" id="wordCount">0</span>
+            <span class="stat-label">Words</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value" id="lineCount">0</span>
+            <span class="stat-label">Lines</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value cv-strength" id="cvStrength">—</span>
+            <span class="stat-label">CV Strength</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION: Preferences -->
+      <section class="settings-card">
+        <div class="card-header">
+          <div class="card-icon pref-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <h2 class="card-title">Preferences</h2>
+            <p class="card-desc">Customize how JobFit Pro behaves.</p>
+          </div>
+        </div>
+
+        <div class="toggle-group">
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <span class="toggle-label">Auto-scan on job pages</span>
+              <span class="toggle-desc">Automatically extract job description when you visit a job listing.</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="autoScan" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="toggle-item">
+            <div class="toggle-info">
+              <span class="toggle-label">Show badge score</span>
+              <span class="toggle-desc">Display match percentage on the extension icon after analysis.</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="showBadge" checked />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- SAVE BUTTON -->
+      <button class="save-btn" id="saveBtn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Save Settings
+      </button>
+
+      <!-- Version Info -->
+      <p class="version-info">JobFit Pro v1.0.0 · Powered by Aravals Inc</p>
+
+    </main>
+
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

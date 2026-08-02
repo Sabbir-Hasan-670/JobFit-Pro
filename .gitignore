@@ -1,0 +1,11 @@
+# ============================================================
+# JobFit Pro — AI Job Analyzer & ATS Matcher
+# ============================================================
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.env
+.env.local
+.vscode/
+.idea/
