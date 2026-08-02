@@ -15,6 +15,27 @@
   // Generic phrase blacklist for job titles
   const TITLE_BLACKLIST = /preferences|recommended|search result|jobs you may|people also|similar jobs|job collection|explore jobs|sign in|login|openings|career|apply now|messaging|notifications/i;
 
+  // Helper to ensure an element is never inside a job search list / card sidebar
+  function isInsideSearchList(el) {
+    if (!el) return false;
+    return Boolean(
+      el.closest(
+        '.scaffold-layout__list, ' +
+        '.scaffold-layout__list-container, ' +
+        '.jobs-search-results-list, ' +
+        '.jobs-search-results, ' +
+        '[data-view-name="job-search-results-list"], ' +
+        '[data-occludable-job-id], ' +
+        '.job-card-container, ' +
+        '.job-card-list, ' +
+        '.jobs-search-results__list, ' +
+        '.jobs-search-results__list-item, ' +
+        'aside, ' +
+        '.jobs-search-two-pane__job-section--list'
+      )
+    );
+  }
+
   // ============================================================
   // LINKEDIN EXTRACTOR
   // ============================================================
@@ -23,38 +44,39 @@
     let company = '';
     let description = '';
 
-    // 1. Identify active detail container (crucial for 2-pane search views)
-    const detailContainer =
-      document.querySelector('.jobs-search__job-details') ||
+    // 1. Identify active detail container (the right pane on LinkedIn 2-pane view)
+    const detailPane =
       document.querySelector('.scaffold-layout__detail') ||
+      document.querySelector('.jobs-search__job-details') ||
       document.querySelector('.jobs-details__main-content') ||
+      document.querySelector('[data-view-name="job-details"]') ||
       document.querySelector('.job-view-layout') ||
       document.querySelector('.jobs-search-two-pane__job-section--detail') ||
-      document.querySelector('[data-view-name="job-details"]') ||
       document.querySelector('.artdeco-modal');
 
-    const searchContext = detailContainer || document;
+    const searchContext = detailPane || document;
 
-    // 2. Title selectors
+    // 2. Title selectors (must NOT be inside left search list)
     const titleSelectors = [
+      'h1.job-details-jobs-unified-top-card__job-title',
       '.job-details-jobs-unified-top-card__job-title h1',
       '.job-details-jobs-unified-top-card__job-title a',
       '.job-details-jobs-unified-top-card__job-title',
-      'h1.job-details-jobs-unified-top-card__job-title',
-      '.jobs-unified-top-card__job-title',
       'h1.jobs-unified-top-card__job-title',
+      '.jobs-unified-top-card__job-title',
       'h1.t-24.t-bold',
       'h1.t-24',
       '.jobs-details__main-content h1',
       '.scaffold-layout__detail h1',
       'h1.top-card-layout__title',
-      'h1.topcard__title'
+      'h1.topcard__title',
+      'h1'
     ];
 
     for (const sel of titleSelectors) {
       try {
         const el = searchContext.querySelector(sel);
-        if (el) {
+        if (el && !isInsideSearchList(el)) {
           const t = (el.innerText || el.textContent || '').trim();
           if (t.length >= 2 && t.length < 200 && !TITLE_BLACKLIST.test(t)) {
             title = t;
@@ -64,23 +86,7 @@
       } catch (_) {}
     }
 
-    // 2b. Title fallback from active card in left search list
-    if (!title) {
-      const activeCardTitleEl = document.querySelector(
-        '.jobs-search-results-list__list-item--active .job-card-list__title, ' +
-        '.job-card-container--clickable.active a, ' +
-        '.jobs-search-results-list__list-item--active a.job-card-container__link, ' +
-        '.job-card-list__title--link'
-      );
-      if (activeCardTitleEl) {
-        const t = (activeCardTitleEl.innerText || activeCardTitleEl.textContent || '').trim();
-        if (t.length >= 2 && t.length < 200 && !TITLE_BLACKLIST.test(t)) {
-          title = t;
-        }
-      }
-    }
-
-    // 3. Company selectors
+    // 3. Company selectors (must NOT be inside left search list)
     const companySelectors = [
       '.job-details-jobs-unified-top-card__company-name a',
       '.job-details-jobs-unified-top-card__company-name',
@@ -100,7 +106,7 @@
     for (const sel of companySelectors) {
       try {
         const el = searchContext.querySelector(sel);
-        if (el) {
+        if (el && !isInsideSearchList(el)) {
           const t = (el.innerText || el.textContent || '').trim();
           const firstLine = t.split('\n')[0].split('•')[0].replace(/^[•·\s\-]+/, '').trim();
           if (firstLine.length >= 2 && firstLine.length < 100) {
@@ -112,76 +118,55 @@
     }
 
     // 4. Job Description Extraction
-    // Strategy A: Direct targeted selectors
-    const exactDescSelectors = [
-      '#job-details',
-      '.jobs-description-content__text',
-      '.jobs-description__content .jobs-box__html-content',
-      '.jobs-box__html-content',
-      '.jobs-description__content',
-      '.jobs-description',
-      '.show-more-less-html__markup',
-      '.jobs-details__main-content article',
-      '.scaffold-layout__detail article',
-      'article.jobs-description__container',
-      '.jobs-search__job-details article'
-    ];
-
-    for (const sel of exactDescSelectors) {
-      try {
-        const els = document.querySelectorAll(sel);
-        for (const el of els) {
-          // Must NOT be inside the left search results sidebar
-          if (el.closest('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside, .jobs-search-two-pane__job-section--list')) {
-            continue;
-          }
-          let text = (el.innerText || el.textContent || '').trim();
-          if (text.length >= 60 && !text.includes('How promoted jobs are ranked') && !text.includes('99+ results')) {
-            description = text;
-            break;
-          }
-        }
-        if (description) break;
-      } catch (_) {}
+    // Step 4A: Check #job-details directly (exclusive to LinkedIn active job details)
+    const jobDetailsEl = document.getElementById('job-details') || document.querySelector('#job-details');
+    if (jobDetailsEl && !isInsideSearchList(jobDetailsEl)) {
+      const text = (jobDetailsEl.innerText || jobDetailsEl.textContent || '').trim();
+      if (text.length >= 40) {
+        description = text;
+      }
     }
 
-    // Strategy B: Find "About the job" heading and traverse upwards safely
-    if (!description || description.length < 60) {
-      try {
-        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, span, div, p'));
-        const aboutHeading = allElements.find(el => {
-          const t = (el.innerText || el.textContent || '').trim().toLowerCase();
-          return t === 'about the job' || t === 'about the role' || t === 'job description';
-        });
+    // Step 4B: Query inside detailPane exclusively
+    if (!description && detailPane) {
+      const paneDescSelectors = [
+        '.jobs-description-content__text',
+        '.jobs-description__content .jobs-box__html-content',
+        '.jobs-box__html-content',
+        '.jobs-description__content',
+        '.jobs-description',
+        '.show-more-less-html__markup',
+        'article'
+      ];
 
-        if (aboutHeading) {
-          let parent = aboutHeading.parentElement;
-          while (parent && parent !== document.body && parent !== document.documentElement) {
-            if (parent.querySelector('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside')) {
+      for (const sel of paneDescSelectors) {
+        try {
+          const el = detailPane.querySelector(sel);
+          if (el) {
+            const text = (el.innerText || el.textContent || '').trim();
+            if (text.length >= 40 && !text.includes('How promoted jobs are ranked') && !text.includes('99+ results')) {
+              description = text;
               break;
             }
-            let text = (parent.innerText || parent.textContent || '').trim();
-            if (text.length >= 60 && !text.includes('99+ results') && !text.includes('How promoted jobs are ranked')) {
-              description = text;
-            }
-            parent = parent.parentElement;
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
     }
 
-    // Strategy C: Slice from detailContainer starting at "About the job"
-    if ((!description || description.length < 60) && detailContainer) {
+    // Step 4C: Slice from detailPane text starting at "About the job" or "Job Purpose"
+    if (!description && detailPane) {
       try {
-        const fullText = (detailContainer.innerText || detailContainer.textContent || '').trim();
+        const fullText = (detailPane.innerText || detailPane.textContent || '').trim();
         const aboutIdx = fullText.search(/About the job/i);
         if (aboutIdx !== -1) {
-          const sliced = fullText.substring(aboutIdx).trim();
-          if (sliced.length >= 60) {
-            description = sliced;
+          description = fullText.substring(aboutIdx).trim();
+        } else {
+          const purposeIdx = fullText.search(/Job Purpose/i);
+          if (purposeIdx !== -1) {
+            description = fullText.substring(purposeIdx).trim();
+          } else if (fullText.length >= 100 && !fullText.includes('99+ results')) {
+            description = fullText;
           }
-        } else if (fullText.length >= 100 && !fullText.includes('99+ results')) {
-          description = fullText;
         }
       } catch (_) {}
     }
@@ -192,6 +177,7 @@
 
     return { title, company, description, portalName: 'LinkedIn' };
   }
+
 
 
 
