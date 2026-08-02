@@ -117,35 +117,29 @@
       '.jobs-box__html-content',
       '.jobs-description__content',
       '.jobs-description',
-      '.show-more-less-html__markup'
+      '.show-more-less-html__markup',
+      '.jobs-details__main-content article',
+      '.scaffold-layout__detail article'
     ];
 
     for (const sel of exactDescSelectors) {
       try {
-        const el = searchContext.querySelector(sel);
-        if (el) {
-          // Exclude any element located in search list
-          if (el.closest('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside')) {
+        const els = searchContext.querySelectorAll(sel);
+        for (const el of els) {
+          // Must NOT be inside the left search results sidebar
+          if (el.closest('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside, .jobs-search-two-pane__job-section--list')) {
             continue;
           }
-          const text = (el.innerText || el.textContent || '').trim();
-          if (text.length >= 80 && !text.includes('How promoted jobs are ranked') && !text.startsWith('99+ results')) {
+          let text = (el.innerText || el.textContent || '').trim();
+          text = text.replace(/^About the job\s*/i, '').trim();
+
+          if (text.length >= 60 && !text.includes('How promoted jobs are ranked') && !text.includes('99+ results')) {
             description = text;
             break;
           }
         }
+        if (description) break;
       } catch (_) {}
-    }
-
-    // Fallback: search within detailContainer only
-    if (!description && detailContainer) {
-      const articleEl = detailContainer.querySelector('article, .jobs-description');
-      if (articleEl) {
-        const text = (articleEl.innerText || articleEl.textContent || '').trim();
-        if (text.length >= 80 && !text.includes('How promoted jobs are ranked') && !text.startsWith('99+ results')) {
-          description = text;
-        }
-      }
     }
 
     return { title, company, description, portalName: 'LinkedIn' };
@@ -179,16 +173,16 @@
   function extractGlassdoor() {
     let title = '', company = '', description = '';
 
-    const titleEl = document.querySelector('[data-test="job-title"], h1[data-test="jobTitle"], .e1tk4kwz1, [class*="JobDetails_jobTitle"], h1');
+    const titleEl = document.querySelector('[data-test="jobTitle"], .JobDetails_jobTitle__RvNS6, h1.heading_Heading__21nSG, h1');
     if (titleEl) title = (titleEl.innerText || titleEl.textContent || '').trim();
 
-    const companyEl = document.querySelector('[data-test="employer-name"], [data-test="empName"], .e1tk4kwz0, [class*="EmployerProfile_employerName"], [class*="employerName"]');
+    const companyEl = document.querySelector('[data-test="employerName"], .EmployerProfile_employerName__8aAaf, .JobDetails_employerName__ZgWld');
     if (companyEl) {
       const c = (companyEl.innerText || companyEl.textContent || '').trim().split('\n')[0];
       company = c.replace(/^[•·\s\-]+/, '').trim();
     }
 
-    const descEl = document.querySelector('[data-test="jobDescriptionContent"], #JobDescriptionContainer, .jobDescriptionContent, .desc, [class*="JobDetails_jobDescription"]');
+    const descEl = document.querySelector('.JobDetails_jobDescription__uWvhp, [data-test="jobDescription"], .jobDescriptionContent, #JobDescriptionContainer');
     if (descEl) description = (descEl.innerText || descEl.textContent || '').trim();
 
     return { title, company, description, portalName: 'Glassdoor' };
@@ -200,15 +194,13 @@
   function extractGreenhouse() {
     let title = '', company = '', description = '';
 
-    const titleEl = document.querySelector('.app-title, h1.app-title, h1');
+    const titleEl = document.querySelector('.app-title, h1.job-title, h1');
     if (titleEl) title = (titleEl.innerText || titleEl.textContent || '').trim();
 
-    const companyEl = document.querySelector('.company-name, .logo img[alt], [class*="company"]');
-    if (companyEl) {
-      company = companyEl.alt || (companyEl.innerText || companyEl.textContent || '').trim();
-    }
+    const companyEl = document.querySelector('.company-name, [class*="company"], .org-name');
+    if (companyEl) company = (companyEl.innerText || companyEl.textContent || '').trim();
 
-    const descEl = document.querySelector('#content, .content, #main-content');
+    const descEl = document.querySelector('#content, .job-post-content, #job-post, .body');
     if (descEl) description = (descEl.innerText || descEl.textContent || '').trim();
 
     return { title, company, description, portalName: 'Greenhouse' };
@@ -220,15 +212,15 @@
   function extractLever() {
     let title = '', company = '', description = '';
 
-    const titleEl = document.querySelector('.posting-header h2, h2.posting-header, h1');
+    const titleEl = document.querySelector('.posting-headline h2, h2.posting-headline, h1');
     if (titleEl) title = (titleEl.innerText || titleEl.textContent || '').trim();
 
-    const companyEl = document.querySelector('.main-header-logo img, a.main-header-logo');
+    const companyEl = document.querySelector('.main-header-logo img[alt], .posting-headline .company-name');
     if (companyEl) {
-      company = companyEl.alt || companyEl.title || '';
+      company = companyEl.getAttribute('alt') || (companyEl.innerText || '').trim();
     }
 
-    const descEl = document.querySelector('.section-wrapper.page-full-width, .posting-page, [data-qa="job-description"]');
+    const descEl = document.querySelector('.posting-page, [data-qa="job-description"], .section-wrapper');
     if (descEl) description = (descEl.innerText || descEl.textContent || '').trim();
 
     return { title, company, description, portalName: 'Lever' };
@@ -240,41 +232,36 @@
   function extractWorkday() {
     let title = '', company = '', description = '';
 
-    const titleEl = document.querySelector('[data-automation-id="jobPostingHeader"], h2[data-automation-id], .WGDC .GF2B, h1');
+    const titleEl = document.querySelector('[data-automation-id="jobPostingHeader"], h1[data-automation-id="jobPostingTitle"], h1');
     if (titleEl) title = (titleEl.innerText || titleEl.textContent || '').trim();
 
-    const companyEl = document.querySelector('[data-automation-id="employerName"], .WGDC [data-automation-id]');
-    if (companyEl) company = (companyEl.innerText || companyEl.textContent || '').trim();
-
-    const descEl = document.querySelector('[data-automation-id="jobPostingDescription"], [data-automation-id="job-requisition-description"], .RWpYed');
+    const descEl = document.querySelector('[data-automation-id="jobPostingDescription"], .job-description, [id*="job-description"]');
     if (descEl) description = (descEl.innerText || descEl.textContent || '').trim();
 
     return { title, company, description, portalName: 'Workday' };
   }
 
   // ============================================================
-  // GENERIC COMPANY NAME FALLBACK
+  // GENERIC COMPANY EXTRACTOR
   // ============================================================
   function genericExtractCompany() {
-    const candidates = [
-      document.querySelector('[itemprop="hiringOrganization"] [itemprop="name"]'),
-      document.querySelector('[itemprop="hiringOrganization"]'),
-      document.querySelector('[itemprop="name"]'),
-      document.querySelector('[class*="company-name"] a'),
+    const metaCompany =
+      document.querySelector('meta[property="og:site_name"]')?.content ||
+      document.querySelector('meta[name="author"]')?.content;
+    if (metaCompany) return metaCompany.trim();
+
+    const companyCandidates = [
       document.querySelector('[class*="company-name"]'),
-      document.querySelector('[class*="companyName"] a'),
       document.querySelector('[class*="companyName"]'),
-      document.querySelector('[class*="employer-name"]'),
-      document.querySelector('[class*="employerName"]'),
-      document.querySelector('[data-company]'),
-      document.querySelector('a[href*="/company/"]'),
-      document.querySelector('[class*="org-name"]'),
+      document.querySelector('[class*="employer"]'),
+      document.querySelector('[data-automation*="company"]'),
+      document.querySelector('[itemprop="hiringOrganization"]'),
     ];
-    for (const el of candidates) {
+
+    for (const el of companyCandidates) {
       if (el) {
-        const t = (el.innerText || el.textContent || el.getAttribute('data-company') || '').trim();
-        const firstLine = t.split('\n')[0].replace(/^[•·\s\-]+/, '').trim();
-        if (firstLine.length >= 2 && firstLine.length < 100) return firstLine;
+        const t = (el.innerText || el.textContent || '').trim().split('\n')[0];
+        if (t && t.length >= 2 && t.length < 80) return t.replace(/^[•·\s\-]+/, '').trim();
       }
     }
     return '';
@@ -391,8 +378,8 @@
       result = extractWorkday();
     }
 
-    // Fallback if description or title missing
-    if (!result.description || result.description.length < 100) {
+    // Generic fallback ONLY if not LinkedIn or if description is still completely empty
+    if (!host.includes('linkedin.com') && (!result.description || result.description.length < 100)) {
       const generic = genericExtract();
       if (!result.title && generic.title) result.title = generic.title;
       if (generic.description && generic.description.length > (result.description || '').length) {

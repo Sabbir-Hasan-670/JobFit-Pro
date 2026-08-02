@@ -141,45 +141,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      chrome.tabs.sendMessage(tabId, { action: 'SCRAPE_JOB' }, (res) => {
-        if (!chrome.runtime.lastError && res && res.success) {
-          sendResponse(res);
-          return;
-        }
-
-        chrome.scripting.executeScript(
-          {
-            target: { tabId },
-            files: ['content/content.js'],
-          },
-          () => {
-            if (chrome.runtime.lastError) {
+      // Always inject content script first so newest scraper code runs even without page reload
+      chrome.scripting.executeScript(
+        {
+          target: { tabId },
+          files: ['content/content.js'],
+        },
+        () => {
+          chrome.tabs.sendMessage(tabId, { action: 'SCRAPE_JOB' }, (res) => {
+            if (!chrome.runtime.lastError && res && res.success) {
+              sendResponse(res);
+            } else {
               sendResponse({
                 success: false,
-                error: 'Could not access page: ' + (chrome.runtime.lastError.message || 'Permission denied'),
+                error: (res && res.error) || 'Could not extract job description. Please ensure the job details are visible on screen.',
               });
-              return;
             }
-
-            setTimeout(() => {
-              chrome.tabs.sendMessage(tabId, { action: 'SCRAPE_JOB' }, (res2) => {
-                if (chrome.runtime.lastError) {
-                  sendResponse({
-                    success: false,
-                    error: 'Could not extract job description from this page. Please make sure the job page is fully loaded and try again.',
-                  });
-                } else {
-                  sendResponse(res2 || { success: false, error: 'No response from page.' });
-                }
-              });
-            }, 150);
-          }
-        );
-      });
+          });
+        }
+      );
     });
 
     return true;
   }
+
 
   // ============================================================
   // Badge Controls
