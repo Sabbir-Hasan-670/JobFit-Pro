@@ -220,6 +220,46 @@ scanJobBtnEl.addEventListener('click', async () => {
   }
 });
 
+// Manual Job Drawer Controls
+const toggleManualJobBtn = document.getElementById('toggleManualJobBtn');
+const manualJobDrawer = document.getElementById('manualJobDrawer');
+const manualJobTitleInput = document.getElementById('manualJobTitle');
+const manualJobTextInput = document.getElementById('manualJobText');
+const applyManualJobBtn = document.getElementById('applyManualJobBtn');
+
+if (toggleManualJobBtn && manualJobDrawer) {
+  toggleManualJobBtn.addEventListener('click', () => {
+    const isHidden = manualJobDrawer.style.display === 'none';
+    manualJobDrawer.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden && extractedJobDescription) {
+      manualJobTextInput.value = extractedJobDescription;
+      manualJobTitleInput.value = extractedJobTitle;
+    }
+  });
+}
+
+if (applyManualJobBtn) {
+  applyManualJobBtn.addEventListener('click', () => {
+    const customText = (manualJobTextInput.value || '').trim();
+    const customTitle = (manualJobTitleInput.value || '').trim();
+
+    if (!customText || customText.length < 20) {
+      showScanError('Please enter at least 20 characters of job description.');
+      return;
+    }
+
+    resetResults();
+    extractedJobTitle = customTitle || 'Custom Job Position';
+    extractedJobCompany = 'Direct Input';
+    extractedJobDescription = customText;
+    extractedPortal = 'Custom';
+
+    showJobPreview(extractedJobTitle, extractedJobDescription, extractedPortal, extractedJobCompany);
+    analyzeBtnEl.disabled = false;
+    manualJobDrawer.style.display = 'none';
+  });
+}
+
 function sendMessageToBackground(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {

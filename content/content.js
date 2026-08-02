@@ -38,14 +38,24 @@
     let description = '';
 
     // 1. Identify active detail container (the right pane on LinkedIn 2-pane view)
-    const detailPane =
+    let detailPane =
       document.querySelector('.scaffold-layout__detail') ||
       document.querySelector('.jobs-search__job-details') ||
       document.querySelector('.jobs-details__main-content') ||
       document.querySelector('[data-view-name="job-details"]') ||
       document.querySelector('.job-view-layout') ||
       document.querySelector('.jobs-search-two-pane__job-section--detail') ||
-      document.querySelector('.artdeco-modal');
+      document.querySelector('.artdeco-modal') ||
+      document.querySelector('main > div:nth-child(2)') ||
+      document.querySelector('main > section:nth-child(2)');
+
+    // Fallback: If no dedicated pane found, find container of #job-details
+    if (!detailPane) {
+      const jd = document.getElementById('job-details') || document.querySelector('#job-details');
+      if (jd) {
+        detailPane = jd.closest('article, section, div.scaffold-layout__detail') || jd.parentElement;
+      }
+    }
 
     const searchContext = detailPane || document;
 
@@ -102,7 +112,7 @@
         if (el && !isInsideSearchList(el)) {
           const t = (el.innerText || el.textContent || '').trim();
           const firstLine = t.split('\n')[0].split('•')[0].replace(/^[•·\s\-]+/, '').trim();
-          if (firstLine.length >= 2 && firstLine.length < 100) {
+          if (firstLine.length >= 2 && firstLine.length < 100 && !TITLE_BLACKLIST.test(firstLine)) {
             company = firstLine;
             break;
           }
@@ -129,6 +139,8 @@
         '.jobs-description__content',
         '.jobs-description',
         '.show-more-less-html__markup',
+        '.jobs-details__main-content article',
+        '.scaffold-layout__detail article',
         'article'
       ];
 
@@ -159,6 +171,30 @@
             description = fullText.substring(purposeIdx).trim();
           } else if (fullText.length >= 100 && !fullText.includes('99+ results')) {
             description = fullText;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Step 4D: Whole page scan for "About the job" that is not inside the search list
+    if (!description || description.length < 40) {
+      try {
+        const allEls = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, b, span, div, p'));
+        const aboutEl = allEls.find(el => {
+          if (isInsideSearchList(el)) return false;
+          const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
+          return txt === 'about the job' || txt === 'about the role';
+        });
+
+        if (aboutEl) {
+          let p = aboutEl.parentElement;
+          while (p && p !== document.body && p !== document.documentElement) {
+            if (isInsideSearchList(p)) break;
+            const txt = (p.innerText || p.textContent || '').trim();
+            if (txt.length >= 60 && !txt.includes('99+ results')) {
+              description = txt;
+            }
+            p = p.parentElement;
           }
         }
       } catch (_) {}
@@ -406,13 +442,12 @@
       result = extractWorkday();
     }
 
-    // Generic fallback ONLY if not LinkedIn or if description is still completely empty
-    if (!host.includes('linkedin.com') && (!result.description || result.description.length < 100)) {
+    // Fallback if description is still missing
+    if (!result.description || result.description.length < 50) {
       const generic = genericExtract();
       if (!result.title && generic.title) result.title = generic.title;
-      if (generic.description && generic.description.length > (result.description || '').length) {
+      if (generic.description && generic.description.length >= 50) {
         result.description = generic.description;
-        if (!result.portalName) result.portalName = 'Generic';
       }
     }
 
