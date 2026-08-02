@@ -30,10 +30,11 @@
       document.querySelector('.jobs-details__main-content') ||
       document.querySelector('.job-view-layout') ||
       document.querySelector('.jobs-search-two-pane__job-section--detail') ||
-      document.querySelector('.artdeco-modal') ||
-      document;
+      document.querySelector('.artdeco-modal');
 
-    // 2. Title selectors (tested on LinkedIn 2024-2026 UI)
+    const searchContext = detailContainer || document;
+
+    // 2. Title selectors
     const titleSelectors = [
       '.job-details-jobs-unified-top-card__job-title h1',
       '.job-details-jobs-unified-top-card__job-title a',
@@ -46,14 +47,12 @@
       '.jobs-details__main-content h1',
       '.scaffold-layout__detail h1',
       'h1.top-card-layout__title',
-      'h1.topcard__title',
-      '.topcard__title',
-      'h1'
+      'h1.topcard__title'
     ];
 
     for (const sel of titleSelectors) {
       try {
-        const el = detailContainer.querySelector(sel) || (detailContainer !== document ? document.querySelector(sel) : null);
+        const el = searchContext.querySelector(sel);
         if (el) {
           const t = (el.innerText || el.textContent || '').trim();
           if (t.length >= 2 && t.length < 200 && !TITLE_BLACKLIST.test(t)) {
@@ -64,35 +63,18 @@
       } catch (_) {}
     }
 
-    // 2b. Title fallback: active card in search list
+    // 2b. Title fallback from active card in left search list
     if (!title) {
       const activeCardTitleEl = document.querySelector(
         '.jobs-search-results-list__list-item--active .job-card-list__title, ' +
         '.job-card-container--clickable.active a, ' +
         '.jobs-search-results-list__list-item--active a.job-card-container__link, ' +
-        '.job-card-list__title--link, ' +
-        '.job-card-list__title'
+        '.job-card-list__title--link'
       );
       if (activeCardTitleEl) {
         const t = (activeCardTitleEl.innerText || activeCardTitleEl.textContent || '').trim();
         if (t.length >= 2 && t.length < 200 && !TITLE_BLACKLIST.test(t)) {
           title = t;
-        }
-      }
-    }
-
-    // 2c. Title fallback: document.title parser
-    if (!title && document.title) {
-      const docTitle = document.title.replace(/\s*\|\s*LinkedIn.*$/i, '').trim();
-      // E.g. "Al-Qadsiah Saudi Club hiring IT Specialist in Al Khobar"
-      const hiringMatch = docTitle.match(/hiring\s+(.*?)\s+in\s+/i);
-      if (hiringMatch && hiringMatch[1]) {
-        title = hiringMatch[1].trim();
-      } else {
-        // E.g. "IT Specialist - Al-Qadsiah Saudi Club"
-        const parts = docTitle.split(/[-–—|•·]/);
-        if (parts.length > 0 && parts[0].trim().length >= 2 && !TITLE_BLACKLIST.test(parts[0])) {
-          title = parts[0].trim();
         }
       }
     }
@@ -109,14 +91,13 @@
       'a.topcard__org-name-link',
       '.topcard__flavor--black-link',
       'a[data-tracking-control-name="public_jobs_topcard-org-name"]',
-      'a[href*="/company/"]',
       '.top-card-layout__first-subline a',
       '.jobs-details__main-content [href*="/company/"]'
     ];
 
     for (const sel of companySelectors) {
       try {
-        const el = detailContainer.querySelector(sel) || (detailContainer !== document ? document.querySelector(sel) : null);
+        const el = searchContext.querySelector(sel);
         if (el) {
           const t = (el.innerText || el.textContent || '').trim();
           const firstLine = t.split('\n')[0].replace(/^[•·\s\-]+/, '').trim();
@@ -128,51 +109,48 @@
       } catch (_) {}
     }
 
-    // 4. Description selectors (sorted by specificity)
-    const descSelectors = [
+    // 4. Job Description Extraction (Priority: #job-details and dedicated description containers)
+    const exactDescSelectors = [
       '#job-details',
-      '.jobs-description__content .jobs-box__html-content',
       '.jobs-description-content__text',
-      '.jobs-description__content',
+      '.jobs-description__content .jobs-box__html-content',
       '.jobs-box__html-content',
+      '.jobs-description__content',
       '.jobs-description',
-      '.show-more-less-html__markup',
-      'article.jobs-description__container',
-      '.jobs-search__job-details article',
-      '.scaffold-layout__detail article',
-      '.description__text'
+      '.show-more-less-html__markup'
     ];
 
-    let candidates = [];
-
-    for (const sel of descSelectors) {
+    for (const sel of exactDescSelectors) {
       try {
-        const elements = detailContainer.querySelectorAll(sel);
-        elements.forEach((el) => {
-          let t = (el.innerText || el.textContent || '').trim();
-          // If #job-details is a header or short label, grab parent container
-          if (t.length < 120) {
-            const parent = el.closest('.jobs-description__content, .jobs-box__html-content, .jobs-description, article, section');
-            if (parent) {
-              const pt = (parent.innerText || parent.textContent || '').trim();
-              if (pt.length > t.length) t = pt;
-            }
+        const el = searchContext.querySelector(sel);
+        if (el) {
+          // Exclude any element located in search list
+          if (el.closest('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside')) {
+            continue;
           }
-          if (t.length >= 100) {
-            candidates.push(t);
+          const text = (el.innerText || el.textContent || '').trim();
+          if (text.length >= 80 && !text.includes('How promoted jobs are ranked') && !text.startsWith('99+ results')) {
+            description = text;
+            break;
           }
-        });
+        }
       } catch (_) {}
     }
 
-    // Pick the longest valid description candidate
-    if (candidates.length > 0) {
-      candidates.sort((a, b) => b.length - a.length);
-      description = candidates[0];
+    // Fallback: search within detailContainer only
+    if (!description && detailContainer) {
+      const articleEl = detailContainer.querySelector('article, .jobs-description');
+      if (articleEl) {
+        const text = (articleEl.innerText || articleEl.textContent || '').trim();
+        if (text.length >= 80 && !text.includes('How promoted jobs are ranked') && !text.startsWith('99+ results')) {
+          description = text;
+        }
+      }
     }
 
     return { title, company, description, portalName: 'LinkedIn' };
   }
+
 
   // ============================================================
   // INDEED EXTRACTOR
