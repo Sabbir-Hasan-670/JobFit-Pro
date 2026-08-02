@@ -30,6 +30,7 @@
       document.querySelector('.jobs-details__main-content') ||
       document.querySelector('.job-view-layout') ||
       document.querySelector('.jobs-search-two-pane__job-section--detail') ||
+      document.querySelector('[data-view-name="job-details"]') ||
       document.querySelector('.artdeco-modal');
 
     const searchContext = detailContainer || document;
@@ -92,7 +93,8 @@
       '.topcard__flavor--black-link',
       'a[data-tracking-control-name="public_jobs_topcard-org-name"]',
       '.top-card-layout__first-subline a',
-      '.jobs-details__main-content [href*="/company/"]'
+      '.jobs-details__main-content [href*="/company/"]',
+      'a[href*="/company/"]'
     ];
 
     for (const sel of companySelectors) {
@@ -100,7 +102,7 @@
         const el = searchContext.querySelector(sel);
         if (el) {
           const t = (el.innerText || el.textContent || '').trim();
-          const firstLine = t.split('\n')[0].replace(/^[•·\s\-]+/, '').trim();
+          const firstLine = t.split('\n')[0].split('•')[0].replace(/^[•·\s\-]+/, '').trim();
           if (firstLine.length >= 2 && firstLine.length < 100) {
             company = firstLine;
             break;
@@ -109,7 +111,8 @@
       } catch (_) {}
     }
 
-    // 4. Job Description Extraction (Priority: #job-details and dedicated description containers)
+    // 4. Job Description Extraction
+    // Strategy A: Direct targeted selectors
     const exactDescSelectors = [
       '#job-details',
       '.jobs-description-content__text',
@@ -119,20 +122,20 @@
       '.jobs-description',
       '.show-more-less-html__markup',
       '.jobs-details__main-content article',
-      '.scaffold-layout__detail article'
+      '.scaffold-layout__detail article',
+      'article.jobs-description__container',
+      '.jobs-search__job-details article'
     ];
 
     for (const sel of exactDescSelectors) {
       try {
-        const els = searchContext.querySelectorAll(sel);
+        const els = document.querySelectorAll(sel);
         for (const el of els) {
           // Must NOT be inside the left search results sidebar
           if (el.closest('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside, .jobs-search-two-pane__job-section--list')) {
             continue;
           }
           let text = (el.innerText || el.textContent || '').trim();
-          text = text.replace(/^About the job\s*/i, '').trim();
-
           if (text.length >= 60 && !text.includes('How promoted jobs are ranked') && !text.includes('99+ results')) {
             description = text;
             break;
@@ -142,8 +145,54 @@
       } catch (_) {}
     }
 
+    // Strategy B: Find "About the job" heading and traverse upwards safely
+    if (!description || description.length < 60) {
+      try {
+        const allElements = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, span, div, p'));
+        const aboutHeading = allElements.find(el => {
+          const t = (el.innerText || el.textContent || '').trim().toLowerCase();
+          return t === 'about the job' || t === 'about the role' || t === 'job description';
+        });
+
+        if (aboutHeading) {
+          let parent = aboutHeading.parentElement;
+          while (parent && parent !== document.body && parent !== document.documentElement) {
+            if (parent.querySelector('.jobs-search-results-list, .scaffold-layout__list, .jobs-search-results, aside')) {
+              break;
+            }
+            let text = (parent.innerText || parent.textContent || '').trim();
+            if (text.length >= 60 && !text.includes('99+ results') && !text.includes('How promoted jobs are ranked')) {
+              description = text;
+            }
+            parent = parent.parentElement;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Strategy C: Slice from detailContainer starting at "About the job"
+    if ((!description || description.length < 60) && detailContainer) {
+      try {
+        const fullText = (detailContainer.innerText || detailContainer.textContent || '').trim();
+        const aboutIdx = fullText.search(/About the job/i);
+        if (aboutIdx !== -1) {
+          const sliced = fullText.substring(aboutIdx).trim();
+          if (sliced.length >= 60) {
+            description = sliced;
+          }
+        } else if (fullText.length >= 100 && !fullText.includes('99+ results')) {
+          description = fullText;
+        }
+      } catch (_) {}
+    }
+
+    if (description) {
+      description = description.replace(/^About the job\s*/i, '').trim();
+    }
+
     return { title, company, description, portalName: 'LinkedIn' };
   }
+
 
 
   // ============================================================
