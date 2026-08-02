@@ -102,16 +102,33 @@ let cachedWorkingModel = null;
 
 const GEMINI_FALLBACK_MODELS = [
   'gemini-2.0-flash',
-  'gemini-1.5-flash-002',
-  'gemini-1.5-flash-001',
-  'gemini-1.5-flash-8b',
-  'gemini-1.5-flash-latest',
   'gemini-1.5-flash',
-  'gemini-1.5-pro-002',
-  'gemini-1.5-pro-001',
   'gemini-1.5-pro',
-  'gemini-pro',
 ];
+
+/**
+ * Helper to fetch with timeout
+ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal;
+
+  try {
+    const res = await fetch(url, { ...options, signal });
+    clearTimeout(timeoutId);
+    return res;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError' && !options.signal?.aborted) {
+      throw new Error('Request timed out. Please check your internet connection or API key.');
+    }
+    throw err;
+  }
+}
 
 /**
  * Discover the best available Gemini model for the user's API key
@@ -198,19 +215,22 @@ async function callGemini(apiKey, prompt, jsonMode = false, signal = null) {
         generationConfig,
       };
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(requestBody),
         signal,
-      });
+      }, 15000);
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         const errMsg  = errData?.error?.message || `HTTP ${response.status}`;
 
-        if (response.status === 400 && (errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID'))) {
-          throw new Error('Invalid Gemini API key. Please check your key in Settings.');
+        if (response.status === 400) {
+          if (errMsg.includes('API key') || errMsg.includes('API_KEY_INVALID')) {
+            throw new Error('Invalid Gemini API key. Please check your key in Settings.');
+          }
+          throw new Error(`Gemini Error: ${errMsg}`);
         }
 
         if (response.status === 429) {

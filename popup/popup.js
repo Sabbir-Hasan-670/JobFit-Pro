@@ -49,11 +49,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   const data = await chrome.storage.local.get([
     'cvText', 'apiKey', 'autoScan',
     'lastAnalysisResult', 'lastAnalysisJob',
-    'isAnalyzing', 'activeAnalysisJob', 'analysisError'
+    'isAnalyzing', 'analysisStartTime', 'activeAnalysisJob', 'analysisError'
   ]);
 
   if (!data.cvText || !data.apiKey) {
     noCvAlertEl.style.display = 'flex';
+  }
+
+  // Auto-reset stuck analysis if it has been running for more than 30 seconds
+  if (data.isAnalyzing && data.analysisStartTime) {
+    const elapsed = Date.now() - data.analysisStartTime;
+    if (elapsed > 30000) {
+      console.warn('[JobFit Pro] Clearing stuck background analysis.');
+      await chrome.storage.local.set({ isAnalyzing: false, analysisError: null });
+      chrome.action.setBadgeText({ text: '' });
+      data.isAnalyzing = false;
+    }
   }
 
   // 2. Check if an analysis is currently running in the background
