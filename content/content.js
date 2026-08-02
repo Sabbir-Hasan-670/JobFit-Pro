@@ -5,13 +5,6 @@
 // ============================================================
 
 (() => {
-  // Prevent duplicate listener registration
-  if (window.__jobfit_scraper_initialized) {
-    console.log('[JobFit Pro] Content scraper already active.');
-    return;
-  }
-  window.__jobfit_scraper_initialized = true;
-
   // Generic phrase blacklist for job titles
   const TITLE_BLACKLIST = /preferences|recommended|search result|jobs you may|people also|similar jobs|job collection|explore jobs|sign in|login|openings|career|apply now|messaging|notifications/i;
 

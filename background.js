@@ -124,7 +124,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Relay: Popup → Content Script (get job description)
   // ============================================================
   if (message.action === 'GET_JOB_DESCRIPTION') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       if (!tabs || tabs.length === 0) {
         sendResponse({ success: false, error: 'No active browser tab found.' });
         return;
@@ -141,25 +141,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      // Always inject content script first so newest scraper code runs even without page reload
-      chrome.scripting.executeScript(
-        {
+      try {
+        // Inject latest content script freshly
+        await chrome.scripting.executeScript({
           target: { tabId },
           files: ['content/content.js'],
-        },
-        () => {
-          chrome.tabs.sendMessage(tabId, { action: 'SCRAPE_JOB' }, (res) => {
-            if (!chrome.runtime.lastError && res && res.success) {
-              sendResponse(res);
-            } else {
-              sendResponse({
-                success: false,
-                error: (res && res.error) || 'Could not extract job description. Please ensure the job details are visible on screen.',
-              });
+        });
+
+        // Directly call the extraction function
+        const execResults = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            if (typeof window.__jobFitExtractJobData === 'function') {
+              return window.__jobFitExtractJobData();
             }
+            return null;
+          },
+        });
+
+        const jobData = execResults && execResults[0] && execResults[0].result;
+
+        if (jobData && jobData.description && jobData.description.length >= 40) {
+          sendResponse({
+            success:        true,
+            jobTitle:       jobData.title,
+            jobCompany:     jobData.company,
+            jobDescription: jobData.description,
+            portalName:     jobData.portalName,
+          });
+        } else {
+          sendResponse({
+            success: false,
+            error:   'Could not detect a full job description on this page. Please make sure the job details are loaded on screen.',
           });
         }
-      );
+      } catch (err) {
+        console.error('[JobFit Pro] Script execution error:', err);
+        sendResponse({
+          success: false,
+          error: 'Could not access page: ' + (err.message || 'Unknown error'),
+        });
+      }
     });
 
     return true;
