@@ -428,18 +428,50 @@
     let result = { title: '', company: '', description: '', portalName: 'Generic' };
     const host = location.hostname.toLowerCase();
 
+    // Priority 0: If user has highlighted / selected text on page, grab it immediately!
+    try {
+      const selectedText = (window.getSelection ? window.getSelection().toString() : '').trim();
+      if (selectedText && selectedText.length >= 30) {
+        result.description = selectedText;
+      }
+    } catch (_) {}
+
     if (host.includes('linkedin.com')) {
-      result = extractLinkedIn();
+      const li = extractLinkedIn();
+      if (!result.description) result.description = li.description;
+      result.title = li.title;
+      result.company = li.company;
+      result.portalName = 'LinkedIn';
     } else if (host.includes('indeed.com')) {
-      result = extractIndeed();
+      const ind = extractIndeed();
+      if (!result.description) result.description = ind.description;
+      result.title = ind.title;
+      result.company = ind.company;
+      result.portalName = 'Indeed';
     } else if (host.includes('glassdoor.com')) {
-      result = extractGlassdoor();
+      const gd = extractGlassdoor();
+      if (!result.description) result.description = gd.description;
+      result.title = gd.title;
+      result.company = gd.company;
+      result.portalName = 'Glassdoor';
     } else if (host.includes('greenhouse.io')) {
-      result = extractGreenhouse();
+      const gh = extractGreenhouse();
+      if (!result.description) result.description = gh.description;
+      result.title = gh.title;
+      result.company = gh.company;
+      result.portalName = 'Greenhouse';
     } else if (host.includes('lever.co')) {
-      result = extractLever();
+      const lv = extractLever();
+      if (!result.description) result.description = lv.description;
+      result.title = lv.title;
+      result.company = lv.company;
+      result.portalName = 'Lever';
     } else if (host.includes('workday.com') || host.includes('myworkday.com')) {
-      result = extractWorkday();
+      const wd = extractWorkday();
+      if (!result.description) result.description = wd.description;
+      result.title = wd.title;
+      result.company = wd.company;
+      result.portalName = 'Workday';
     }
 
     // Fallback if description is still missing
