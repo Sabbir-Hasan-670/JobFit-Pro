@@ -18,6 +18,7 @@
     if (!element || value === undefined || value === null || value === '') return false;
 
     try {
+      element.focus();
       const prototype = element instanceof HTMLTextAreaElement
         ? window.HTMLTextAreaElement.prototype
         : window.HTMLInputElement.prototype;
@@ -29,7 +30,12 @@
         element.value = value;
       }
 
+      // Dispatch multiple modern & legacy event types to satisfy React, Angular & Workday UXI
+      element.dispatchEvent(new Event('focus', { bubbles: true }));
       element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      try {
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: String(value) }));
+      } catch (_) {}
       element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
       element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
       return true;
@@ -102,12 +108,14 @@
     if (!el) return '';
     const parts = [];
 
-    // 1. Standard attributes
+    // 1. Standard attributes & Workday automation IDs
     if (el.name) parts.push(el.name);
     if (el.id) parts.push(el.id);
     if (el.placeholder) parts.push(el.placeholder);
     if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
     if (el.getAttribute('autocomplete')) parts.push(el.getAttribute('autocomplete'));
+    if (el.getAttribute('data-automation-id')) parts.push(el.getAttribute('data-automation-id'));
+    if (el.getAttribute('data-uxi-element-id')) parts.push(el.getAttribute('data-uxi-element-id'));
     if (el.getAttribute('data-test-id') || el.getAttribute('data-testid')) {
       parts.push(el.getAttribute('data-test-id') || el.getAttribute('data-testid'));
     }
@@ -118,13 +126,22 @@
       if (label) parts.push(label.innerText);
     }
 
-    // 3. Closest wrapping label or form group
-    const parentLabel = el.closest('label, .form-group, .field, [class*="form-element"], [class*="input-wrap"], [class*="fb-dash-form-element"], .jobs-easy-apply-form-section__grouping');
+    // 3. Associated label via aria-labelledby
+    if (el.getAttribute('aria-labelledby')) {
+      const ids = el.getAttribute('aria-labelledby').split(/\s+/);
+      ids.forEach(id => {
+        const lbl = document.getElementById(id);
+        if (lbl) parts.push(lbl.innerText);
+      });
+    }
+
+    // 4. Closest wrapping label or form group (Including Workday & Greenhouse wrappers)
+    const parentLabel = el.closest('label, [data-automation-id*="formField"], [data-automation-id*="form-item"], [data-automation-id*="decoration"], [data-automation-id*="Section"], .form-group, .field, [class*="formField"], [class*="form-element"], [class*="input-wrap"], [class*="fb-dash-form-element"], .jobs-easy-apply-form-section__grouping');
     if (parentLabel) {
       parts.push(parentLabel.innerText);
     }
 
-    // 4. Preceding sibling label or span
+    // 5. Preceding sibling label or span
     let prev = el.previousElementSibling;
     while (prev) {
       if (prev.tagName === 'LABEL' || prev.tagName === 'SPAN' || prev.tagName === 'P' || prev.tagName === 'DIV') {
@@ -148,17 +165,46 @@
     if (type === 'email' || ctx.includes('email') || ctx.includes('e-mail') || ctx.includes('email address')) {
       return 'email';
     }
-    if (type === 'tel' || ctx.includes('phone') || ctx.includes('mobile') || ctx.includes('telephone') || ctx.includes('cell phone') || ctx.includes('contact number')) {
+    if (type === 'tel' || ctx.includes('phone') || ctx.includes('mobile') || ctx.includes('telephone') || ctx.includes('cell phone') || ctx.includes('contact number') || ctx.includes('phone-number')) {
       return 'phone';
     }
 
-    // Name checks
-    if (ctx.includes('first name') || ctx.includes('fname') || ctx.includes('given name') || ctx.includes('firstname') || ctx.includes('first_name')) {
+    // Workday & International Name checks (Latin vs Arabic/Non-Latin)
+    if (ctx.includes('arabic given name') || ctx.includes('arabic first name')) {
+      return 'arabicFirstName';
+    }
+    if (ctx.includes('arabic family name') || ctx.includes('arabic last name')) {
+      return 'arabicLastName';
+    }
+
+    if (
+      ctx.includes('given name') ||
+      ctx.includes('first name') ||
+      ctx.includes('fname') ||
+      ctx.includes('firstname') ||
+      ctx.includes('first_name') ||
+      ctx.includes('latin script') && ctx.includes('given') ||
+      ctx.includes('legalnamesection_firstname') ||
+      ctx.includes('legalnamesection_givenname')
+    ) {
       return 'firstName';
     }
-    if (ctx.includes('last name') || ctx.includes('lname') || ctx.includes('family name') || ctx.includes('surname') || ctx.includes('lastname') || ctx.includes('last_name')) {
+
+    if (
+      ctx.includes('family name') ||
+      ctx.includes('last name') ||
+      ctx.includes('lname') ||
+      ctx.includes('familyname') ||
+      ctx.includes('surname') ||
+      ctx.includes('lastname') ||
+      ctx.includes('last_name') ||
+      ctx.includes('latin script') && ctx.includes('family') ||
+      ctx.includes('legalnamesection_lastname') ||
+      ctx.includes('legalnamesection_familyname')
+    ) {
       return 'lastName';
     }
+
     if ((ctx.includes('full name') || ctx.includes('candidate name') || ctx.includes('your name') || ctx === 'name') && !ctx.includes('first') && !ctx.includes('last') && !ctx.includes('company')) {
       return 'fullName';
     }
@@ -175,16 +221,16 @@
     }
 
     // Location
-    if (ctx.includes('city') || ctx.includes('town') || ctx.includes('municipality')) {
+    if (ctx.includes('addresssection_city') || ctx.includes('city') || ctx.includes('town') || ctx.includes('municipality')) {
       return 'city';
     }
-    if (ctx.includes('state') || ctx.includes('province') || ctx.includes('region')) {
+    if (ctx.includes('addresssection_countryregion') || ctx.includes('state') || ctx.includes('province') || ctx.includes('region')) {
       return 'state';
     }
     if (ctx.includes('country') || ctx.includes('nationality')) {
       return 'country';
     }
-    if (ctx.includes('zip') || ctx.includes('postal') || ctx.includes('postcode') || ctx.includes('post code')) {
+    if (ctx.includes('addresssection_postalcode') || ctx.includes('zip') || ctx.includes('postal') || ctx.includes('postcode') || ctx.includes('post code')) {
       return 'zipCode';
     }
 
