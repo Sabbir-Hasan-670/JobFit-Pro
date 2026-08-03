@@ -16,40 +16,43 @@
 
   function setNativeValue(element, value) {
     if (!element || value === undefined || value === null || value === '') return false;
+    if (element.readOnly || element.disabled) return false;
 
     try {
-      element.focus();
+      const strVal = String(value);
+      if (element.value === strVal) return true;
+
+      // 1. Prototype setter for Virtual DOM sync
       const prototype = element instanceof HTMLTextAreaElement
         ? window.HTMLTextAreaElement.prototype
         : window.HTMLInputElement.prototype;
 
       const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
       if (descriptor && descriptor.set) {
-        descriptor.set.call(element, value);
+        descriptor.set.call(element, strVal);
       } else {
-        element.value = value;
+        element.value = strVal;
       }
 
-      // Dispatch multiple modern & legacy event types to satisfy React, Angular & Workday UXI
-      element.dispatchEvent(new Event('focus', { bubbles: true }));
-      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      try {
-        element.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, data: String(value) }));
-      } catch (_) {}
-      element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-      element.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+      // 2. React 16/17/18/19 internal value tracker sync
+      if (element._valueTracker) {
+        element._valueTracker.setValue(strVal);
+      }
+
+      // 3. Dispatch standard bubbling events
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     } catch (e) {
-      console.warn('[JobFit Pro] Could not set input value:', e);
-      element.value = value;
-      return true;
+      console.warn('[JobFit Pro] Could not set input value safely:', e);
+      return false;
     }
   }
 
   function setSelectOption(select, targetValue) {
-    if (!select || !targetValue) return false;
+    if (!select || !targetValue || select.disabled) return false;
     const target = String(targetValue).toLowerCase().trim();
-    const options = Array.from(select.options);
+    const options = Array.from(select.options || []);
 
     // 1. Exact match by text or value
     let match = options.find(o =>
@@ -66,11 +69,18 @@
     }
 
     if (match) {
-      select.selectedIndex = match.index;
-      select.value = match.value;
-      select.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-      select.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-      return true;
+      try {
+        select.selectedIndex = match.index;
+        select.value = match.value;
+        if (select._valueTracker) {
+          select._valueTracker.setValue(match.value);
+        }
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
     return false;
   }
@@ -80,21 +90,24 @@
     const isYes = /yes|true|authorized|agree|1/i.test(desiredChoice);
 
     for (const radio of radios) {
+      if (radio.disabled) continue;
       const text = getElementContext(radio);
       const isRadioYes = /yes|authorized|eligible|true|1/i.test(text) || /yes|true/i.test(radio.value);
       const isRadioNo  = /no|not|false|0/i.test(text) || /no|false/i.test(radio.value);
 
       if (isYes && isRadioYes && !isRadioNo) {
-        radio.checked = true;
-        radio.dispatchEvent(new Event('click', { bubbles: true }));
-        radio.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
+        try {
+          radio.checked = true;
+          radio.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        } catch (_) {}
       }
       if (!isYes && isRadioNo) {
-        radio.checked = true;
-        radio.dispatchEvent(new Event('click', { bubbles: true }));
-        radio.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
+        try {
+          radio.checked = true;
+          radio.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        } catch (_) {}
       }
     }
     return false;
@@ -122,30 +135,36 @@
 
     // 2. Associated <label> via 'for' attribute
     if (el.id) {
-      const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
-      if (label) parts.push(label.innerText);
+      try {
+        const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (label && label.innerText) parts.push(label.innerText);
+      } catch (_) {}
     }
 
     // 3. Associated label via aria-labelledby
     if (el.getAttribute('aria-labelledby')) {
       const ids = el.getAttribute('aria-labelledby').split(/\s+/);
       ids.forEach(id => {
-        const lbl = document.getElementById(id);
-        if (lbl) parts.push(lbl.innerText);
+        try {
+          const lbl = document.getElementById(id);
+          if (lbl && lbl.innerText) parts.push(lbl.innerText);
+        } catch (_) {}
       });
     }
 
-    // 4. Closest wrapping label or form group (Including Workday & Greenhouse wrappers)
-    const parentLabel = el.closest('label, [data-automation-id*="formField"], [data-automation-id*="form-item"], [data-automation-id*="decoration"], [data-automation-id*="Section"], .form-group, .field, [class*="formField"], [class*="form-element"], [class*="input-wrap"], [class*="fb-dash-form-element"], .jobs-easy-apply-form-section__grouping');
-    if (parentLabel) {
-      parts.push(parentLabel.innerText);
+    // 4. Closest direct field wrapper (exclude large multi-field parent sections)
+    const directWrapper = el.closest('label, [data-automation-id*="formField-"], [data-automation-id*="form-item"], .form-group, .field, [class*="formField-"], [class*="form-element"]');
+    if (directWrapper && directWrapper.innerText && directWrapper.innerText.length < 120) {
+      parts.push(directWrapper.innerText);
     }
 
-    // 5. Preceding sibling label or span
+    // 5. Preceding sibling label or text
     let prev = el.previousElementSibling;
     while (prev) {
-      if (prev.tagName === 'LABEL' || prev.tagName === 'SPAN' || prev.tagName === 'P' || prev.tagName === 'DIV') {
-        parts.push(prev.innerText);
+      if (prev.tagName === 'LABEL' || prev.tagName === 'SPAN') {
+        if (prev.innerText && prev.innerText.length < 80) {
+          parts.push(prev.innerText);
+        }
         break;
       }
       prev = prev.previousElementSibling;
@@ -165,16 +184,16 @@
     if (type === 'email' || ctx.includes('email') || ctx.includes('e-mail') || ctx.includes('email address')) {
       return 'email';
     }
-    if (type === 'tel' || ctx.includes('phone') || ctx.includes('mobile') || ctx.includes('telephone') || ctx.includes('cell phone') || ctx.includes('contact number') || ctx.includes('phone-number')) {
+    if (type === 'tel' || ctx.includes('phone') || ctx.includes('mobile') || ctx.includes('telephone') || ctx.includes('contact number')) {
       return 'phone';
     }
 
-    // Workday & International Name checks (Latin vs Arabic/Non-Latin)
-    if (ctx.includes('arabic given name') || ctx.includes('arabic first name')) {
-      return 'arabicFirstName';
-    }
-    if (ctx.includes('arabic family name') || ctx.includes('arabic last name')) {
-      return 'arabicLastName';
+    // Workday Latin vs Non-Latin / Arabic separation
+    const isArabic = ctx.includes('arabic');
+    if (isArabic) {
+      if (ctx.includes('given') || ctx.includes('first')) return 'arabicFirstName';
+      if (ctx.includes('family') || ctx.includes('last')) return 'arabicLastName';
+      return null;
     }
 
     if (
@@ -183,7 +202,7 @@
       ctx.includes('fname') ||
       ctx.includes('firstname') ||
       ctx.includes('first_name') ||
-      ctx.includes('latin script') && ctx.includes('given') ||
+      (ctx.includes('latin script') && ctx.includes('given')) ||
       ctx.includes('legalnamesection_firstname') ||
       ctx.includes('legalnamesection_givenname')
     ) {
@@ -198,14 +217,14 @@
       ctx.includes('surname') ||
       ctx.includes('lastname') ||
       ctx.includes('last_name') ||
-      ctx.includes('latin script') && ctx.includes('family') ||
+      (ctx.includes('latin script') && ctx.includes('family')) ||
       ctx.includes('legalnamesection_lastname') ||
       ctx.includes('legalnamesection_familyname')
     ) {
       return 'lastName';
     }
 
-    if ((ctx.includes('full name') || ctx.includes('candidate name') || ctx.includes('your name') || ctx === 'name') && !ctx.includes('first') && !ctx.includes('last') && !ctx.includes('company')) {
+    if ((ctx.includes('full name') || ctx.includes('candidate name') || ctx.includes('your name')) && !ctx.includes('first') && !ctx.includes('last') && !ctx.includes('company')) {
       return 'fullName';
     }
 
@@ -216,12 +235,12 @@
     if (ctx.includes('github') || ctx.includes('github.com') || ctx.includes('git hub')) {
       return 'githubUrl';
     }
-    if (ctx.includes('portfolio') || ctx.includes('website') || ctx.includes('personal site') || ctx.includes('personal url') || ctx.includes('blog') || ctx.includes('link to work')) {
+    if (ctx.includes('portfolio') || ctx.includes('personal site') || ctx.includes('personal url') || ctx.includes('website')) {
       return 'portfolioUrl';
     }
 
     // Location
-    if (ctx.includes('addresssection_city') || ctx.includes('city') || ctx.includes('town') || ctx.includes('municipality')) {
+    if (ctx.includes('addresssection_city') || ctx.includes('city') || ctx.includes('town')) {
       return 'city';
     }
     if (ctx.includes('addresssection_countryregion') || ctx.includes('state') || ctx.includes('province') || ctx.includes('region')) {
@@ -230,43 +249,43 @@
     if (ctx.includes('country') || ctx.includes('nationality')) {
       return 'country';
     }
-    if (ctx.includes('addresssection_postalcode') || ctx.includes('zip') || ctx.includes('postal') || ctx.includes('postcode') || ctx.includes('post code')) {
+    if (ctx.includes('addresssection_postalcode') || ctx.includes('zip') || ctx.includes('postal') || ctx.includes('postcode')) {
       return 'zipCode';
     }
 
     // Work Authorization & Sponsorship
-    if (ctx.includes('authorized to work') || ctx.includes('legally authorized') || ctx.includes('right to work') || ctx.includes('eligible to work in')) {
+    if (ctx.includes('authorized to work') || ctx.includes('legally authorized') || ctx.includes('right to work')) {
       return 'workAuth';
     }
-    if (ctx.includes('sponsorship') || ctx.includes('visa sponsorship') || ctx.includes('require sponsorship') || ctx.includes('need sponsorship')) {
+    if (ctx.includes('sponsorship') || ctx.includes('visa sponsorship') || ctx.includes('require sponsorship')) {
       return 'sponsorship';
     }
 
     // Experience & Role
-    if (ctx.includes('years of experience') || ctx.includes('total experience') || ctx.includes('how many years') || ctx.includes('experience (years)')) {
+    if (ctx.includes('years of experience') || ctx.includes('total experience') || ctx.includes('how many years')) {
       return 'experience';
     }
-    if (ctx.includes('current title') || ctx.includes('recent title') || ctx.includes('current role') || ctx.includes('job title') || ctx.includes('position title')) {
+    if (ctx.includes('current title') || ctx.includes('recent title') || ctx.includes('current role') || ctx.includes('job title')) {
       return 'currentTitle';
     }
-    if (ctx.includes('current company') || ctx.includes('current employer') || ctx.includes('recent employer') || ctx.includes('most recent company')) {
+    if (ctx.includes('current company') || ctx.includes('current employer') || ctx.includes('recent employer')) {
       return 'currentCompany';
     }
-    if (ctx.includes('notice period') || ctx.includes('availability') || ctx.includes('how soon can you start') || ctx.includes('start date')) {
+    if (ctx.includes('notice period') || ctx.includes('availability') || ctx.includes('start date')) {
       return 'noticePeriod';
     }
-    if (ctx.includes('desired salary') || ctx.includes('expected salary') || ctx.includes('salary expectation') || ctx.includes('compensation requirement')) {
+    if (ctx.includes('desired salary') || ctx.includes('expected salary') || ctx.includes('salary expectation')) {
       return 'salary';
     }
 
     // Education
-    if (ctx.includes('highest degree') || ctx.includes('education level') || ctx.includes('degree') || ctx.includes('level of education')) {
+    if (ctx.includes('highest degree') || ctx.includes('education level') || ctx.includes('degree')) {
       return 'degree';
     }
-    if (ctx.includes('university') || ctx.includes('school') || ctx.includes('college') || ctx.includes('institution') || ctx.includes('alma mater')) {
+    if (ctx.includes('university') || ctx.includes('school') || ctx.includes('college') || ctx.includes('institution')) {
       return 'university';
     }
-    if (ctx.includes('graduation year') || ctx.includes('grad year') || ctx.includes('year of graduation') || ctx.includes('end year')) {
+    if (ctx.includes('graduation year') || ctx.includes('grad year') || ctx.includes('year of graduation')) {
       return 'gradYear';
     }
 
@@ -288,7 +307,7 @@
   // MAIN AUTOFILL FUNCTION
   // ============================================================
 
-  async function autofillForm(profile, fillAiQuestions = true) {
+  async function autofillForm(profile, fillAiQuestions = false) {
     if (!profile) {
       console.warn('[JobFit Pro] No profile data available to autofill.');
       return { count: 0, message: 'No candidate profile found. Please set it in Settings.' };
@@ -296,69 +315,65 @@
 
     let filledCount = 0;
 
-    // 1. Scan all input elements
-    const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="file"]), select, textarea'));
+    // 1. Scan only visible, non-disabled, editable elements
+    const allElements = Array.from(document.querySelectorAll('input, select, textarea'));
+    const inputs = allElements.filter(el => {
+      if (!el || el.disabled || el.readOnly) return false;
+      const type = (el.type || '').toLowerCase();
+      if (['hidden', 'submit', 'button', 'file', 'image', 'reset'].includes(type)) return false;
+      if (el.getAttribute('aria-hidden') === 'true') return false;
+      if (el.getAttribute('role') === 'combobox' && el.readOnly) return false;
+      return true;
+    });
 
     const radioGroups = {};
 
     for (const el of inputs) {
-      // Group radio buttons by name
-      if (el.type === 'radio') {
-        const groupName = el.name || 'unnamed_radio';
-        if (!radioGroups[groupName]) radioGroups[groupName] = [];
-        radioGroups[groupName].push(el);
-        continue;
-      }
+      try {
+        // Group radio buttons by name
+        if (el.type === 'radio') {
+          const groupName = el.name || 'unnamed_radio';
+          if (!radioGroups[groupName]) radioGroups[groupName] = [];
+          radioGroups[groupName].push(el);
+          continue;
+        }
 
-      const ctx = getElementContext(el);
-      const category = matchFieldCategory(ctx, el);
+        const ctx = getElementContext(el);
+        const category = matchFieldCategory(ctx, el);
 
-      if (category && profile[category]) {
-        const val = profile[category];
-
-        if (el.tagName === 'SELECT') {
-          if (setSelectOption(el, val)) filledCount++;
-        } else {
+        if (category && profile[category]) {
+          const val = profile[category];
+          if (el.tagName === 'SELECT') {
+            if (setSelectOption(el, val)) filledCount++;
+          } else {
+            if (setNativeValue(el, val)) filledCount++;
+          }
+        } else if (category === 'fullName' && (profile.fullName || (profile.firstName && profile.lastName))) {
+          const val = profile.fullName || `${profile.firstName} ${profile.lastName}`.trim();
           if (setNativeValue(el, val)) filledCount++;
         }
-      } else if (category === 'fullName' && (profile.fullName || (profile.firstName && profile.lastName))) {
-        const val = profile.fullName || `${profile.firstName} ${profile.lastName}`.trim();
-        if (setNativeValue(el, val)) filledCount++;
-      } else if (el.tagName === 'TEXTAREA' && fillAiQuestions && (!el.value || el.value.trim().length < 5)) {
-        // AI SMART QUESTION ANSWERING FOR UNMATCHED TEXTAREAS
-        // (e.g. "Why are you interested in this position?", "Tell us about your experience...")
-        if (ctx.length > 10 && !ctx.includes('paste') && !ctx.includes('cover letter') && !ctx.includes('resume')) {
-          console.log('[JobFit Pro] Detected custom application question for AI:', ctx);
-          try {
-            chrome.runtime.sendMessage({
-              action: 'ANSWER_APPLICATION_QUESTION',
-              questionText: ctx,
-            }, (response) => {
-              if (response?.success && response.answer) {
-                setNativeValue(el, response.answer);
-              }
-            });
-            filledCount++;
-          } catch (err) {
-            console.warn('[JobFit Pro] AI question answer error:', err);
-          }
-        }
+      } catch (err) {
+        console.warn('[JobFit Pro] Field fill warning:', err);
       }
     }
 
-    // 2. Handle Radio Groups
+    // 2. Handle Radio Groups safely
     for (const groupName of Object.keys(radioGroups)) {
-      const radios = radioGroups[groupName];
-      const ctx = getElementContext(radios[0]);
-      const category = matchFieldCategory(ctx, radios[0]);
+      try {
+        const radios = radioGroups[groupName];
+        const ctx = getElementContext(radios[0]);
+        const category = matchFieldCategory(ctx, radios[0]);
 
-      if (category && profile[category]) {
-        if (setRadioOption(radios, profile[category])) filledCount++;
+        if (category && profile[category]) {
+          if (setRadioOption(radios, profile[category])) filledCount++;
+        }
+      } catch (err) {
+        console.warn('[JobFit Pro] Radio group warning:', err);
       }
     }
 
     console.log(`[JobFit Pro] Autofill completed. Total fields filled: ${filledCount}`);
-    return { count: filledCount, message: `✨ ${filledCount} field${filledCount === 1 ? '' : 's'} auto-filled!` };
+    return { count: filledCount, message: `✨ Successfully filled ${filledCount} fields!` };
   }
 
   // ============================================================
