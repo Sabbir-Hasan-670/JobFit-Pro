@@ -189,6 +189,82 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
   // ============================================================
+  // TRIGGER AUTOFILL (From Popup -> Content Script)
+  // ============================================================
+  if (message.action === 'TRIGGER_AUTOFILL') {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (!tabs || tabs.length === 0) {
+        sendResponse({ success: false, error: 'No active browser tab found.' });
+        return;
+      }
+
+      const tab = tabs[0];
+      const tabId = tab.id;
+
+      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
+        sendResponse({
+          success: false,
+          error: 'Cannot autofill internal browser pages. Please open an application form on a website.',
+        });
+        return;
+      }
+
+      try {
+        // Ensure autofill script is injected
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content/autofill.js'],
+        }).catch(() => {});
+
+        // Send trigger message to the content script
+        chrome.tabs.sendMessage(tabId, { action: 'TRIGGER_AUTOFILL' }, (res) => {
+          if (chrome.runtime.lastError) {
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            sendResponse(res || { success: true, count: 0, message: 'Autofill triggered.' });
+          }
+        });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    });
+
+    return true;
+  }
+
+  // ============================================================
+  // ANSWER APPLICATION QUESTION WITH AI
+  // ============================================================
+  if (message.action === 'ANSWER_APPLICATION_QUESTION') {
+    (async () => {
+      try {
+        const data = await chrome.storage.local.get(['cvText', 'apiKey', 'apiProvider', 'openrouterModel', 'lastAnalysisJob']);
+        if (!data.apiKey || !data.cvText) {
+          sendResponse({ success: false, error: 'API key or CV missing in settings.' });
+          return;
+        }
+
+        const jobDesc = data.lastAnalysisJob?.jobDescription || '';
+        const answer = await globalThis.JobFitAPI.answerApplicationQuestion(
+          data.apiProvider || 'gemini',
+          data.apiKey,
+          data.cvText,
+          jobDesc,
+          message.questionText,
+          data.openrouterModel || ''
+        );
+
+        sendResponse({ success: true, answer });
+      } catch (err) {
+        console.error('[JobFit Pro] AI question answer error:', err);
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+
+    return true;
+  }
+
+  // ============================================================
   // Badge Controls
   // ============================================================
   if (message.action === 'UPDATE_BADGE') {

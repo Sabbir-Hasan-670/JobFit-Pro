@@ -34,6 +34,12 @@ const cachedResultBarEl    = document.getElementById('cachedResultBar');
 const cachedResultTimeEl   = document.getElementById('cachedResultTime');
 const clearCachedResultEl  = document.getElementById('clearCachedResult');
 
+// ---- 1-Click Autofill DOM References ----
+const autofillFormBtnEl    = document.getElementById('autofillFormBtn');
+const autofillSpinnerEl    = document.getElementById('autofillSpinner');
+const autofillStatusEl     = document.getElementById('autofillStatus');
+const autofillBtnTextEl    = document.getElementById('autofillBtnText');
+
 // ---- State ----
 let extractedJobDescription = '';
 let extractedJobTitle       = '';
@@ -269,6 +275,51 @@ if (applyManualJobBtn) {
     analyzeBtnEl.disabled = false;
     manualJobDrawer.style.display = 'none';
   });
+}
+
+// ============================================================
+// 1-CLICK APPLICATION FORM AUTOFILL
+// ============================================================
+if (autofillFormBtnEl) {
+  autofillFormBtnEl.addEventListener('click', async () => {
+    // 1. Check profile in storage
+    const data = await chrome.storage.local.get(['userProfile', 'cvText']);
+    if (!data.userProfile) {
+      showAutofillStatus('⚠️ Please set up your Candidate Profile in Settings first!', true);
+      return;
+    }
+
+    autofillFormBtnEl.disabled = true;
+    if (autofillSpinnerEl) autofillSpinnerEl.style.display = 'inline-block';
+    if (autofillBtnTextEl) autofillBtnTextEl.textContent = 'Autofilling...';
+
+    try {
+      const res = await sendMessageToBackground({ action: 'TRIGGER_AUTOFILL' });
+      if (res && res.success) {
+        showAutofillStatus(res.message || `✨ Filled ${res.count || 0} fields!`, false);
+      } else {
+        const errMsg = res?.error || 'Could not autofill forms on this page.';
+        showAutofillStatus(errMsg, true);
+      }
+    } catch (err) {
+      showAutofillStatus('Autofill failed: ' + (err.message || 'Unknown error'), true);
+    } finally {
+      autofillFormBtnEl.disabled = false;
+      if (autofillSpinnerEl) autofillSpinnerEl.style.display = 'none';
+      if (autofillBtnTextEl) autofillBtnTextEl.textContent = '⚡ 1-Click Autofill Form';
+    }
+  });
+}
+
+function showAutofillStatus(msg, isError = false) {
+  if (!autofillStatusEl) return;
+  autofillStatusEl.textContent = msg;
+  autofillStatusEl.className = isError ? 'autofill-status-bar error' : 'autofill-status-bar';
+  autofillStatusEl.style.display = 'block';
+
+  setTimeout(() => {
+    if (autofillStatusEl) autofillStatusEl.style.display = 'none';
+  }, 4500);
 }
 
 function sendMessageToBackground(message) {

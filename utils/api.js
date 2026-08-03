@@ -510,12 +510,138 @@ async function generateCoverLetter(provider, apiKey, cvText, jobDescription, job
   return letter.trim();
 }
 
+/**
+ * Build profile extraction prompt.
+ */
+function buildProfileExtractionPrompt(cvText) {
+  return `
+You are an expert resume parser. Extract structured candidate profile information from the following CV text.
+Return a JSON object ONLY — no markdown, no explanation, no code fences.
+
+CV TEXT:
+"""
+${cvText.substring(0, 5000)}
+"""
+
+Return ONLY this JSON structure (fill empty string "" if not found):
+{
+  "firstName": "",
+  "lastName": "",
+  "fullName": "",
+  "email": "",
+  "phone": "",
+  "city": "",
+  "state": "",
+  "country": "",
+  "zipCode": "",
+  "linkedinUrl": "",
+  "githubUrl": "",
+  "portfolioUrl": "",
+  "currentCompany": "",
+  "currentTitle": "",
+  "highestDegree": "",
+  "university": "",
+  "graduationYear": "",
+  "totalYearsExperience": 0,
+  "summary": ""
+}
+`.trim();
+}
+
+/**
+ * Build application question answering prompt.
+ */
+function buildQuestionAnswerPrompt(cvText, jobDescription, questionText) {
+  return `
+You are a job applicant filling out a job application form.
+Answer the following application question honestly, professionally, and concisely based on the candidate's CV and the job details.
+
+JOB DESCRIPTION:
+"""
+${(jobDescription || '').substring(0, 2000)}
+"""
+
+CANDIDATE CV:
+"""
+${(cvText || '').substring(0, 2500)}
+"""
+
+APPLICATION QUESTION:
+"${questionText}"
+
+INSTRUCTIONS:
+- Write in the first person ("I have...", "In my recent experience...").
+- Keep it concise: 2-3 impactful sentences (under 75 words).
+- Highlight relevant tools/skills from the CV that match the question.
+- Return ONLY the exact answer text. No quotation marks, no preamble.
+`.trim();
+}
+
+// ============================================================
+// PUBLIC: extractProfileFromCV
+// ============================================================
+async function extractProfileFromCV(provider, apiKey, cvText, customModel = '', signal = null) {
+  const prompt = buildProfileExtractionPrompt(cvText);
+
+  let rawText;
+  if (provider === 'openrouter') {
+    rawText = await callOpenRouter(apiKey, prompt, /* jsonMode= */ true, customModel, signal);
+  } else if (provider === 'openai') {
+    rawText = await callOpenAI(apiKey, prompt, /* jsonMode= */ true, signal);
+  } else {
+    rawText = await callGemini(apiKey, prompt, /* jsonMode= */ true, signal);
+  }
+
+  const parsed = parseJsonResponse(rawText);
+  return {
+    firstName:            parsed.firstName || '',
+    lastName:             parsed.lastName  || '',
+    fullName:             parsed.fullName  || `${parsed.firstName || ''} ${parsed.lastName || ''}`.trim(),
+    email:                parsed.email     || '',
+    phone:                parsed.phone     || '',
+    city:                 parsed.city      || '',
+    state:                parsed.state     || '',
+    country:              parsed.country   || '',
+    zipCode:              parsed.zipCode   || '',
+    linkedinUrl:          parsed.linkedinUrl || '',
+    githubUrl:            parsed.githubUrl   || '',
+    portfolioUrl:         parsed.portfolioUrl || '',
+    currentCompany:       parsed.currentCompany || '',
+    currentTitle:         parsed.currentTitle   || '',
+    highestDegree:        parsed.highestDegree  || '',
+    university:           parsed.university     || '',
+    graduationYear:       parsed.graduationYear || '',
+    totalYearsExperience: parseInt(parsed.totalYearsExperience, 10) || 0,
+    summary:              parsed.summary || '',
+  };
+}
+
+// ============================================================
+// PUBLIC: answerApplicationQuestion
+// ============================================================
+async function answerApplicationQuestion(provider, apiKey, cvText, jobDescription, questionText, customModel = '', signal = null) {
+  const prompt = buildQuestionAnswerPrompt(cvText, jobDescription, questionText);
+
+  let answer;
+  if (provider === 'openrouter') {
+    answer = await callOpenRouter(apiKey, prompt, /* jsonMode= */ false, customModel, signal);
+  } else if (provider === 'openai') {
+    answer = await callOpenAI(apiKey, prompt, /* jsonMode= */ false, signal);
+  } else {
+    answer = await callGemini(apiKey, prompt, /* jsonMode= */ false, signal);
+  }
+
+  return answer.trim().replace(/^["']|["']$/g, '');
+}
+
 // ============================================================
 // EXPORTS (Support globalThis and ES module)
 // ============================================================
 const JobFitAPI = {
   analyzeWithAI,
   generateCoverLetter,
+  extractProfileFromCV,
+  answerApplicationQuestion,
   discoverGeminiModel,
   callGemini,
   callOpenAI,

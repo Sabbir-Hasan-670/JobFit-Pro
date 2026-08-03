@@ -66,6 +66,16 @@
         <textarea id="manualJobText" placeholder="Paste job description here..." rows="4" style="width:100%; box-sizing:border-box; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:6px; padding:8px 10px; font-size:12px; resize:vertical;"></textarea>
         <button class="btn btn-primary" id="applyManualJobBtn" style="font-size:12px; padding:6px 12px; width:100%;">Use This Description</button>
       </div>
+
+      <!-- 1-Click Form Autofill Action -->
+      <div class="autofill-container" style="margin-top: 8px;">
+        <button class="btn btn-autofill" id="autofillFormBtn" title="Autofill job application forms on this page with your profile">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <span id="autofillBtnText">⚡ 1-Click Autofill Form</span>
+          <div class="btn-spinner" id="autofillSpinner" style="display:none;"></div>
+        </button>
+        <div class="autofill-status-bar" id="autofillStatus" style="display:none;"></div>
+      </div>
     </section>
 
     <!-- === DIVIDER === -->

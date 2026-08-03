@@ -932,3 +932,55 @@ body::before {
 }
 
 .hidden { display: none !important; }
+
+/* ===== 1-CLICK AUTOFILL BUTTON & STATUS ===== */
+.btn-autofill {
+  width: 100%;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(124, 58, 237, 0.25));
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  color: #e9d5ff;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.15);
+}
+
+.btn-autofill:hover {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(124, 58, 237, 0.4));
+  border-color: rgba(168, 85, 247, 0.8);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.35);
+}
+
+.btn-autofill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.autofill-status-bar {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.autofill-status-bar.error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}

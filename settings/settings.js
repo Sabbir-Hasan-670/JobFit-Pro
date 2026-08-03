@@ -31,6 +31,37 @@ const saveBtnEl              = document.getElementById('saveBtn');
 const saveToastEl            = document.getElementById('saveToast');
 const toastMsgEl             = document.getElementById('toastMessage');
 
+// ---- Profile DOM References (Autofill) ----
+const autoPopulateProfileBtnEl = document.getElementById('autoPopulateProfileBtn');
+const autoPopulateSpinnerEl   = document.getElementById('autoPopulateSpinner');
+
+const profileFields = {
+  firstName:      document.getElementById('profileFirstName'),
+  lastName:       document.getElementById('profileLastName'),
+  email:          document.getElementById('profileEmail'),
+  phone:          document.getElementById('profilePhone'),
+  city:           document.getElementById('profileCity'),
+  state:          document.getElementById('profileState'),
+  country:        document.getElementById('profileCountry'),
+  zipCode:        document.getElementById('profileZip'),
+  linkedinUrl:    document.getElementById('profileLinkedin'),
+  githubUrl:      document.getElementById('profileGithub'),
+  portfolioUrl:   document.getElementById('profilePortfolio'),
+  workAuth:       document.getElementById('profileWorkAuth'),
+  sponsorship:    document.getElementById('profileSponsorship'),
+  experience:     document.getElementById('profileExperience'),
+  currentTitle:   document.getElementById('profileCurrentTitle'),
+  currentCompany: document.getElementById('profileCurrentCompany'),
+  noticePeriod:   document.getElementById('profileNoticePeriod'),
+  salary:         document.getElementById('profileSalary'),
+  degree:         document.getElementById('profileDegree'),
+  university:     document.getElementById('profileUniversity'),
+  gradYear:       document.getElementById('profileGradYear'),
+  gender:         document.getElementById('profileGender'),
+  veteran:        document.getElementById('profileVeteran'),
+  disability:     document.getElementById('profileDisability'),
+};
+
 // ---- API Key hints per provider ----
 const API_HINTS = {
   gemini:     'Get your key from Google AI Studio (aistudio.google.com)',
@@ -94,11 +125,12 @@ function updateApiKeyStatus(hasKey) {
 }
 
 // ============================================================
-// INIT — Load saved settings
+// INIT — Load saved settings & candidate profile
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
   const data = await chrome.storage.local.get([
-    'apiProvider', 'apiKey', 'openrouterModel', 'cvText', 'autoScan', 'showBadge'
+    'apiProvider', 'apiKey', 'openrouterModel', 'cvText', 'autoScan', 'showBadge',
+    'userProfile'
   ]);
 
   if (data.apiProvider) apiProviderEl.value = data.apiProvider;
@@ -117,6 +149,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (data.cvText) cvTextEl.value = data.cvText;
   if (data.autoScan  !== undefined) autoScanEl.checked  = data.autoScan;
   if (data.showBadge !== undefined) showBadgeEl.checked = data.showBadge;
+
+  // Load user profile fields if saved
+  if (data.userProfile) {
+    const p = data.userProfile;
+    Object.keys(profileFields).forEach(key => {
+      if (profileFields[key] && p[key] !== undefined && p[key] !== '') {
+        profileFields[key].value = p[key];
+      }
+    });
+  }
 
   updateApiHint();
   updateCvStats();
@@ -426,7 +468,69 @@ pasteCvBtn.addEventListener('click', async () => {
 });
 
 // ============================================================
-// SAVE SETTINGS
+// AUTO-POPULATE PROFILE FROM CV USING AI
+// ============================================================
+if (autoPopulateProfileBtnEl) {
+  autoPopulateProfileBtnEl.addEventListener('click', async () => {
+    const apiKey      = apiKeyEl.value.trim();
+    const apiProvider = apiProviderEl.value;
+    const customModel = openrouterModelEl ? openrouterModelEl.value.trim() : '';
+    const cvText      = cvTextEl.value.trim();
+
+    if (!apiKey) {
+      showToast('Please enter your API key first.', 'error');
+      apiKeyEl.focus();
+      return;
+    }
+
+    if (!cvText || cvText.length < 50) {
+      showToast('Please paste your full CV text in the box above.', 'error');
+      cvTextEl.focus();
+      return;
+    }
+
+    autoPopulateProfileBtnEl.disabled = true;
+    if (autoPopulateSpinnerEl) autoPopulateSpinnerEl.style.display = 'inline-block';
+
+    try {
+      showToast('AI is extracting your profile details from CV...', 'success');
+      const profile = await globalThis.JobFitAPI.extractProfileFromCV(apiProvider, apiKey, cvText, customModel);
+
+      if (profile) {
+        if (profile.firstName && profileFields.firstName) profileFields.firstName.value = profile.firstName;
+        if (profile.lastName && profileFields.lastName)   profileFields.lastName.value  = profile.lastName;
+        if (profile.email && profileFields.email)         profileFields.email.value     = profile.email;
+        if (profile.phone && profileFields.phone)         profileFields.phone.value     = profile.phone;
+        if (profile.city && profileFields.city)           profileFields.city.value      = profile.city;
+        if (profile.state && profileFields.state)         profileFields.state.value     = profile.state;
+        if (profile.country && profileFields.country)     profileFields.country.value   = profile.country;
+        if (profile.zipCode && profileFields.zipCode)     profileFields.zipCode.value   = profile.zipCode;
+
+        if (profile.linkedinUrl && profileFields.linkedinUrl) profileFields.linkedinUrl.value = profile.linkedinUrl;
+        if (profile.githubUrl && profileFields.githubUrl)     profileFields.githubUrl.value   = profile.githubUrl;
+        if (profile.portfolioUrl && profileFields.portfolioUrl) profileFields.portfolioUrl.value = profile.portfolioUrl;
+
+        if (profile.currentTitle && profileFields.currentTitle) profileFields.currentTitle.value = profile.currentTitle;
+        if (profile.currentCompany && profileFields.currentCompany) profileFields.currentCompany.value = profile.currentCompany;
+        if (profile.highestDegree && profileFields.degree) profileFields.degree.value = profile.highestDegree;
+        if (profile.university && profileFields.university) profileFields.university.value = profile.university;
+        if (profile.graduationYear && profileFields.gradYear) profileFields.gradYear.value = profile.graduationYear;
+        if (profile.totalYearsExperience && profileFields.experience) profileFields.experience.value = profile.totalYearsExperience;
+
+        showToast('✨ Profile details extracted! Click "Save Settings" to store.', 'success');
+      }
+    } catch (err) {
+      console.error('[JobFit Pro] Profile extraction error:', err);
+      showToast('Extraction failed: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      autoPopulateProfileBtnEl.disabled = false;
+      if (autoPopulateSpinnerEl) autoPopulateSpinnerEl.style.display = 'none';
+    }
+  });
+}
+
+// ============================================================
+// SAVE SETTINGS & PROFILE
 // ============================================================
 saveBtnEl.addEventListener('click', saveSettings);
 
@@ -450,12 +554,28 @@ async function saveSettings() {
     return;
   }
 
+  // Collect user profile data
+  const userProfile = {};
+  Object.keys(profileFields).forEach(key => {
+    if (profileFields[key]) {
+      userProfile[key] = profileFields[key].value.trim();
+    }
+  });
+
   // Save to Chrome Local Storage
-  await chrome.storage.local.set({ apiProvider, apiKey, openrouterModel, cvText, autoScan, showBadge });
+  await chrome.storage.local.set({
+    apiProvider,
+    apiKey,
+    openrouterModel,
+    cvText,
+    autoScan,
+    showBadge,
+    userProfile
+  });
 
   updateApiKeyStatus(true);
   apiStatusTextEl.textContent = '✓ Saved in browser';
-  showToast('Settings saved successfully! ✓');
+  showToast('Settings & Profile saved successfully! ✓');
 }
 
 // ---- Toast Notification ----

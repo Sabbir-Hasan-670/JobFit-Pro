@@ -40,7 +40,7 @@
         "https://www.ziprecruiter.com/jobs/*",
         "https://*/*"
       ],
-      "js": ["content/content.js"],
+      "js": ["content/content.js", "content/autofill.js"],
       "run_at": "document_idle"
     }
   ],
