@@ -5,25 +5,39 @@
 // ============================================================
 
 (() => {
-  if (window.__jobfit_autofill_loaded) return;
-  window.__jobfit_autofill_loaded = true;
-
-  console.log('[JobFit Pro] Autofill engine initialized.');
+  console.log('[JobFit Pro] Autofill engine updated & active.');
 
   // ============================================================
   // REACT / VUE / ANGULAR SAFE VALUE SETTERS
   // ============================================================
 
+  function isComplexPromptWidget(el) {
+    if (!el) return true;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    if (role === 'combobox' || role === 'listbox' || role === 'button' || role === 'option') return true;
+    if (el.getAttribute('aria-haspopup')) return true;
+    if (el.getAttribute('aria-autocomplete')) return true;
+
+    // Check if inside custom Workday prompt or select box
+    if (el.closest('[data-automation-id*="prompt"], [data-automation-id*="dropdown"], [data-automation-id*="select-widget"], [data-automation-id*="countryDropdown"], [data-automation-id*="sourcePrompt"]')) {
+      return true;
+    }
+    return false;
+  }
+
   function setNativeValue(element, value) {
     if (!element || value === undefined || value === null || value === '') return false;
     if (element.readOnly || element.disabled) return false;
+    if (isComplexPromptWidget(element)) return false;
 
     try {
-      const strVal = String(value);
+      const strVal = String(value).trim();
+      if (!strVal) return false;
       if (element.value === strVal) return true;
 
       // 1. Prototype setter for Virtual DOM sync
-      const prototype = element instanceof HTMLTextAreaElement
+      const isTextArea = element instanceof HTMLTextAreaElement;
+      const prototype = isTextArea
         ? window.HTMLTextAreaElement.prototype
         : window.HTMLInputElement.prototype;
 
@@ -40,8 +54,8 @@
       }
 
       // 3. Dispatch standard bubbling events
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
+      element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
       return true;
     } catch (e) {
       console.warn('[JobFit Pro] Could not set input value safely:', e);
@@ -114,6 +128,116 @@
   }
 
   // ============================================================
+  // WORKDAY DEDICATED SAFE AUTOFILL ENGINE
+  // ============================================================
+
+  function autofillWorkday(profile) {
+    let filledCount = 0;
+
+    const fillTarget = (selectors, value) => {
+      if (!value) return;
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el && !el.disabled && !el.readOnly && !isComplexPromptWidget(el) && (!el.value || el.value === '')) {
+          if (setNativeValue(el, value)) {
+            filledCount++;
+            return;
+          }
+        }
+      }
+    };
+
+    // 1. Given Name (Latin Script)
+    const firstName = profile.firstName || (profile.fullName ? profile.fullName.split(' ')[0] : '');
+    fillTarget([
+      'input[data-automation-id*="legalNameSection_firstName"]',
+      'input[data-automation-id*="legalNameSection_givenName"]',
+      'input[data-automation-id="legalNameSection_firstName"]',
+      'input[data-automation-id="givenName"]',
+      'input[data-automation-id="firstName"]'
+    ], firstName);
+
+    // 2. Family Name (Latin Script)
+    const lastName = profile.lastName || (profile.fullName ? profile.fullName.split(' ').slice(1).join(' ') : '');
+    fillTarget([
+      'input[data-automation-id*="legalNameSection_lastName"]',
+      'input[data-automation-id*="legalNameSection_familyName"]',
+      'input[data-automation-id="legalNameSection_lastName"]',
+      'input[data-automation-id="familyName"]',
+      'input[data-automation-id="lastName"]'
+    ], lastName);
+
+    // 3. Address Line 1
+    const address = profile.address || profile.city || '';
+    fillTarget([
+      'input[data-automation-id*="addressSection_addressLine1"]',
+      'input[data-automation-id="addressSection_addressLine1"]',
+      'input[data-automation-id="addressLine1"]'
+    ], address);
+
+    // 4. City
+    if (profile.city) {
+      fillTarget([
+        'input[data-automation-id*="addressSection_city"]',
+        'input[data-automation-id="addressSection_city"]',
+        'input[data-automation-id="city"]'
+      ], profile.city);
+    }
+
+    // 5. Postal / Zip Code
+    const zip = profile.zip || profile.zipCode || '';
+    if (zip) {
+      fillTarget([
+        'input[data-automation-id*="addressSection_postalCode"]',
+        'input[data-automation-id="addressSection_postalCode"]',
+        'input[data-automation-id="postalCode"]'
+      ], zip);
+    }
+
+    // 6. Phone Number
+    const phone = profile.phone || profile.mobile || '';
+    if (phone) {
+      fillTarget([
+        'input[data-automation-id*="phone-number"]',
+        'input[data-automation-id="phone-number"]',
+        'input[data-automation-id*="phoneNumber"]',
+        'input[data-automation-id="multimedia-phone-number"]'
+      ], phone);
+    }
+
+    // 7. Email
+    if (profile.email) {
+      fillTarget([
+        'input[data-automation-id*="email"]',
+        'input[data-automation-id="email"]',
+        'input[type="email"]'
+      ], profile.email);
+    }
+
+    // 8. Online Profiles / URLs
+    if (profile.linkedin || profile.linkedinUrl) {
+      fillTarget([
+        'input[data-automation-id*="linkedin"]',
+        'input[data-automation-id*="LinkedIn"]'
+      ], profile.linkedin || profile.linkedinUrl);
+    }
+    if (profile.github || profile.githubUrl) {
+      fillTarget([
+        'input[data-automation-id*="github"]',
+        'input[data-automation-id*="GitHub"]'
+      ], profile.github || profile.githubUrl);
+    }
+    if (profile.portfolio || profile.portfolioUrl) {
+      fillTarget([
+        'input[data-automation-id*="website"]',
+        'input[data-automation-id*="portfolio"]'
+      ], profile.portfolio || profile.portfolioUrl);
+    }
+
+    return filledCount;
+  }
+
+  // ============================================================
   // FIELD CONTEXT EXTRACTOR (Label, placeholder, aria, name, id)
   // ============================================================
 
@@ -121,17 +245,12 @@
     if (!el) return '';
     const parts = [];
 
-    // 1. Standard attributes & Workday automation IDs
+    // 1. Standard attributes
     if (el.name) parts.push(el.name);
     if (el.id) parts.push(el.id);
     if (el.placeholder) parts.push(el.placeholder);
     if (el.getAttribute('aria-label')) parts.push(el.getAttribute('aria-label'));
     if (el.getAttribute('autocomplete')) parts.push(el.getAttribute('autocomplete'));
-    if (el.getAttribute('data-automation-id')) parts.push(el.getAttribute('data-automation-id'));
-    if (el.getAttribute('data-uxi-element-id')) parts.push(el.getAttribute('data-uxi-element-id'));
-    if (el.getAttribute('data-test-id') || el.getAttribute('data-testid')) {
-      parts.push(el.getAttribute('data-test-id') || el.getAttribute('data-testid'));
-    }
 
     // 2. Associated <label> via 'for' attribute
     if (el.id) {
@@ -152,7 +271,7 @@
       });
     }
 
-    // 4. Closest direct field wrapper (exclude large multi-field parent sections)
+    // 4. Closest direct field wrapper
     const directWrapper = el.closest('label, [data-automation-id*="formField-"], [data-automation-id*="form-item"], .form-group, .field, [class*="formField-"], [class*="form-element"]');
     if (directWrapper && directWrapper.innerText && directWrapper.innerText.length < 120) {
       parts.push(directWrapper.innerText);
@@ -313,16 +432,28 @@
       return { count: 0, message: 'No candidate profile found. Please set it in Settings.' };
     }
 
+    // 1. If on Workday, use dedicated Workday engine
+    const isWorkday = Boolean(
+      window.location.hostname.includes('myworkdayjobs.com') ||
+      document.querySelector('[data-automation-id*="legalNameSection"], [data-automation-id*="addressSection"], [data-automation-id*="formField"]')
+    );
+
+    if (isWorkday) {
+      const workdayCount = autofillWorkday(profile);
+      console.log(`[JobFit Pro] Workday autofill completed. Total fields filled: ${workdayCount}`);
+      return { count: workdayCount, message: `✨ Filled ${workdayCount} Workday fields!` };
+    }
+
     let filledCount = 0;
 
-    // 1. Scan only visible, non-disabled, editable elements
+    // 2. Generic scan for other platforms (LinkedIn, Greenhouse, Lever, etc.)
     const allElements = Array.from(document.querySelectorAll('input, select, textarea'));
     const inputs = allElements.filter(el => {
       if (!el || el.disabled || el.readOnly) return false;
       const type = (el.type || '').toLowerCase();
       if (['hidden', 'submit', 'button', 'file', 'image', 'reset'].includes(type)) return false;
       if (el.getAttribute('aria-hidden') === 'true') return false;
-      if (el.getAttribute('role') === 'combobox' && el.readOnly) return false;
+      if (isComplexPromptWidget(el)) return false;
       return true;
     });
 
@@ -330,7 +461,6 @@
 
     for (const el of inputs) {
       try {
-        // Group radio buttons by name
         if (el.type === 'radio') {
           const groupName = el.name || 'unnamed_radio';
           if (!radioGroups[groupName]) radioGroups[groupName] = [];
@@ -357,7 +487,7 @@
       }
     }
 
-    // 2. Handle Radio Groups safely
+    // Radio Groups
     for (const groupName of Object.keys(radioGroups)) {
       try {
         const radios = radioGroups[groupName];
