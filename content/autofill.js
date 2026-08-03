@@ -194,7 +194,7 @@
     let filledCount = 0;
 
     const tryFill = (input, val) => {
-      if (input && val && (!input.value || input.value.trim() === '')) {
+      if (input && val !== undefined && val !== null && String(val).trim() !== '') {
         if (input.tagName === 'SELECT') {
           if (setSelectOption(input, val)) {
             filledCount++;
@@ -479,12 +479,12 @@
       tryFill(el, exp);
     }
 
-    // 22. Generic fallback for any remaining unfilled inputs/textareas
+    // 22. Generic fallback for any other inputs/textareas
     const remainingInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select')).filter(el => {
       if (!el || el.disabled || el.readOnly || isComplexPromptWidget(el)) return false;
       const type = (el.type || '').toLowerCase();
       if (['submit', 'button', 'file', 'image', 'reset'].includes(type)) return false;
-      return (!el.value || el.value.trim() === '');
+      return true;
     });
 
     for (const el of remainingInputs) {
