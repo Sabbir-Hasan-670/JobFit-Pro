@@ -189,45 +189,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
   // ============================================================
-  // TRIGGER AUTOFILL (From Popup -> Content Script)
+  // TRIGGER AUTOFILL (From Popup -> Direct Script Execution)
   // ============================================================
   if (message.action === 'TRIGGER_AUTOFILL') {
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      if (!tabs || tabs.length === 0) {
-        sendResponse({ success: false, error: 'No active browser tab found.' });
-        return;
-      }
-
-      const tab = tabs[0];
-      const tabId = tab.id;
-
-      if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
-        sendResponse({
-          success: false,
-          error: 'Cannot autofill internal browser pages. Please open an application form on a website.',
-        });
-        return;
-      }
-
+    (async () => {
       try {
-        // Ensure autofill script is injected
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || tabs.length === 0) {
+          sendResponse({ success: false, error: 'No active browser tab found.' });
+          return;
+        }
+
+        const tab = tabs[0];
+        const tabId = tab.id;
+
+        if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
+          sendResponse({
+            success: false,
+            error: 'Cannot autofill internal browser pages. Please open an application form on a website.',
+          });
+          return;
+        }
+
+        const data = await chrome.storage.local.get(['userProfile']);
+        if (!data.userProfile) {
+          sendResponse({
+            success: false,
+            error: 'Candidate profile is empty. Please configure your profile in Settings first!',
+          });
+          return;
+        }
+
+        // Ensure script is injected fresh
         await chrome.scripting.executeScript({
           target: { tabId },
           files: ['content/autofill.js'],
-        }).catch(() => {});
+        });
 
-        // Send trigger message to the content script
-        chrome.tabs.sendMessage(tabId, { action: 'TRIGGER_AUTOFILL' }, (res) => {
-          if (chrome.runtime.lastError) {
-            sendResponse({ success: false, error: chrome.runtime.lastError.message });
-          } else {
-            sendResponse(res || { success: true, count: 0, message: 'Autofill triggered.' });
-          }
+        // Directly execute autofill runner in tab context
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: async (profile) => {
+            if (typeof window.__jobFitAutofillForm === 'function') {
+              return await window.__jobFitAutofillForm(profile);
+            }
+            return { count: 0, message: 'Autofill engine initialized on page.' };
+          },
+          args: [data.userProfile],
+        });
+
+        const res = results && results[0] && results[0].result;
+        sendResponse({
+          success: true,
+          count: res?.count || 0,
+          message: res?.message || 'Autofill executed!',
         });
       } catch (err) {
-        sendResponse({ success: false, error: err.message });
+        console.error('[JobFit Pro] Autofill script execution error:', err);
+        sendResponse({
+          success: false,
+          error: 'Autofill error: ' + (err.message || 'Could not access page'),
+        });
       }
-    });
+    })();
 
     return true;
   }

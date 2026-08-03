@@ -468,6 +468,9 @@
     }, 3500);
   }
 
+  // Expose global runner for direct scripting execution
+  window.__jobFitAutofillForm = autofillForm;
+
   // Inject floating button after page idle and on URL change
   setTimeout(injectFloatingWidget, 1500);
   setInterval(injectFloatingWidget, 4000);
