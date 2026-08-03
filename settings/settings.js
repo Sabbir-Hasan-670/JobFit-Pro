@@ -55,8 +55,11 @@ const profileFields = {
   noticePeriod:   document.getElementById('profileNoticePeriod'),
   salary:         document.getElementById('profileSalary'),
   degree:         document.getElementById('profileDegree'),
+  fieldOfStudy:   document.getElementById('profileFieldOfStudy'),
   university:     document.getElementById('profileUniversity'),
   gradYear:       document.getElementById('profileGradYear'),
+  gpa:            document.getElementById('profileGpa'),
+  skills:         document.getElementById('profileSkills'),
   gender:         document.getElementById('profileGender'),
   veteran:        document.getElementById('profileVeteran'),
   disability:     document.getElementById('profileDisability'),
@@ -513,8 +516,13 @@ if (autoPopulateProfileBtnEl) {
         if (profile.currentTitle && profileFields.currentTitle) profileFields.currentTitle.value = profile.currentTitle;
         if (profile.currentCompany && profileFields.currentCompany) profileFields.currentCompany.value = profile.currentCompany;
         if (profile.highestDegree && profileFields.degree) profileFields.degree.value = profile.highestDegree;
+        if (profile.fieldOfStudy && profileFields.fieldOfStudy) profileFields.fieldOfStudy.value = profile.fieldOfStudy;
         if (profile.university && profileFields.university) profileFields.university.value = profile.university;
         if (profile.graduationYear && profileFields.gradYear) profileFields.gradYear.value = profile.graduationYear;
+        if (profile.gpa && profileFields.gpa) profileFields.gpa.value = profile.gpa;
+        if (profile.skills && profileFields.skills) {
+          profileFields.skills.value = Array.isArray(profile.skills) ? profile.skills.join(', ') : profile.skills;
+        }
         if (profile.totalYearsExperience && profileFields.experience) profileFields.experience.value = profile.totalYearsExperience;
 
         showToast('✨ Profile details extracted! Click "Save Settings" to store.', 'success');

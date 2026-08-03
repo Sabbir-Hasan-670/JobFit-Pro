@@ -399,50 +399,130 @@
     const school = getProfileVal('university', 'school', 'institution', 'college');
     if (school) {
       const el = findWorkdayElement(
-        [['school'], ['university'], ['institution'], ['college']],
-        ['school', 'university', 'institution', 'college', 'education']
+        [['school or university'], ['school'], ['university'], ['institution'], ['college']],
+        ['school', 'university', 'institution', 'college', 'education', 'schoolName'],
+        ['field of study', 'degree', 'gpa', 'year']
       );
       tryFill(el, school);
     }
 
-    // 15. Education - Degree
-    const degree = getProfileVal('degree', 'highestDegree', 'education');
-    if (degree) {
-      const el = findWorkdayElement(
-        [['degree'], ['highest degree'], ['degree level'], ['education level']],
-        ['degree', 'degreeName', 'highestDegree', 'educationLevel']
-      );
-      tryFill(el, degree);
+    // 15. Education - Degree (Dropdown / Button / Select)
+    const degreeVal = getProfileVal('degree', 'highestDegree', 'education') || 'Bachelor';
+    const degreeEl = document.querySelector('button[data-automation-id*="degree"], [data-automation-id*="formField-degree"] button, [data-automation-id*="formField-degree"] [role="button"], select[data-automation-id*="degree"], [data-automation-id*="highestDegree"] button') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('degree'))?.closest('div')?.querySelector('button, select, [role="button"]') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('degree'))?.parentElement?.querySelector('button, select, [role="button"]');
+
+    if (degreeEl) {
+      if (degreeEl.tagName === 'SELECT') {
+        if (setSelectOption(degreeEl, degreeVal)) filledCount++;
+      } else {
+        degreeEl.focus();
+        degreeEl.click();
+        setTimeout(() => {
+          const options = Array.from(document.querySelectorAll('[role="option"], [data-automation-id*="promptOption"], [data-automation-id*="menu-item"], [data-automation-id*="dropdownOption"], li[role="option"]'));
+          const targetLower = degreeVal.toLowerCase();
+          let matchedOpt = options.find(o => o.innerText && o.innerText.toLowerCase().includes(targetLower));
+          if (!matchedOpt) {
+            matchedOpt = options.find(o => {
+              const t = (o.innerText || '').toLowerCase();
+              return t.includes('bachelor') || t.includes('master') || t.includes('degree') || t.includes('undergraduate') || t.includes('bsc');
+            });
+          }
+          if (matchedOpt) {
+            matchedOpt.click();
+          } else if (options.length > 1) {
+            const validOpt = options.find(o => o.innerText && !o.innerText.toLowerCase().includes('select one'));
+            if (validOpt) validOpt.click();
+          }
+        }, 300);
+        filledCount++;
+      }
     }
 
-    // 16. Education - Field of Study / Major
-    const major = getProfileVal('fieldOfStudy', 'major', 'discipline');
-    if (major) {
-      const el = findWorkdayElement(
-        [['field of study'], ['major'], ['discipline'], ['area of study']],
-        ['fieldOfStudy', 'major', 'discipline']
-      );
-      tryFill(el, major);
+    // 16. Education - Field of Study (Searchable Prompt Combobox)
+    const majorVal = getProfileVal('fieldOfStudy', 'major', 'discipline') || 'Computer Science';
+    const fieldOfStudyInput = document.querySelector('input[data-automation-id*="fieldOfStudy"], input[data-automation-id*="field-of-study"], [data-automation-id*="formField-fieldOfStudy"] input, input[placeholder*="Field of Study"]') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('field of study'))?.closest('div')?.querySelector('input') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('field of study'))?.parentElement?.querySelector('input');
+
+    if (fieldOfStudyInput) {
+      fieldOfStudyInput.focus();
+      setNativeValue(fieldOfStudyInput, majorVal);
+      fieldOfStudyInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      fieldOfStudyInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+
+      setTimeout(() => {
+        const promptOpts = Array.from(document.querySelectorAll('[role="option"], [data-automation-id*="promptOption"], [data-automation-id*="menu-item"], [role="treeitem"]'));
+        const match = promptOpts.find(o => (o.innerText || '').toLowerCase().includes(majorVal.toLowerCase())) || promptOpts[0];
+        if (match) match.click();
+      }, 350);
+      filledCount++;
     }
 
-    // 17. Education - Graduation Year / To
-    const gradYear = getProfileVal('gradYear', 'graduationYear', 'year');
-    if (gradYear) {
-      const el = findWorkdayElement(
-        [['graduation year'], ['grad year'], ['year of graduation'], ['year']],
-        ['gradYear', 'graduationYear', 'year']
-      );
-      tryFill(el, gradYear);
+    // 17. Education - Dates (From: YYYY, To: YYYY)
+    const eduContainer = document.querySelector('[data-automation-id*="education"], [data-automation-id*="Education"], #education, .education-section') ||
+      Array.from(document.querySelectorAll('h2, h3, h4, [data-automation-id*="header"], label')).find(h => (h.innerText || '').toLowerCase().includes('education'))?.closest('div, section, fieldset');
+
+    if (eduContainer) {
+      const yyyyInputs = Array.from(eduContainer.querySelectorAll('input')).filter(inp => {
+        const p = (inp.placeholder || '').toUpperCase();
+        const l = (getElementContext(inp) || '').toLowerCase();
+        return p === 'YYYY' || l.includes('from') || l.includes('to') || l.includes('year') || l.includes('grad');
+      });
+
+      const gradYear = parseInt(getProfileVal('gradYear', 'graduationYear') || '2021', 10);
+      const fromYear = String(gradYear - 4);
+      const toYear = String(gradYear);
+
+      if (yyyyInputs.length >= 2) {
+        tryFill(yyyyInputs[0], fromYear);
+        tryFill(yyyyInputs[1], toYear);
+      } else if (yyyyInputs.length === 1) {
+        tryFill(yyyyInputs[0], toYear);
+      }
     }
 
     // 18. Education - Overall Result / GPA
-    const gpa = getProfileVal('gpa', 'overallResult', 'grade');
-    if (gpa) {
-      const el = findWorkdayElement(
-        [['overall result'], ['gpa'], ['grade'], ['cgpa']],
-        ['overallResult', 'gpa', 'grade', 'cgpa']
-      );
-      tryFill(el, gpa);
+    const gpaVal = getProfileVal('gpa', 'overallResult', 'grade') || '3.5';
+    const gpaEl = findWorkdayElement(
+      [['overall result'], ['gpa'], ['grade'], ['cgpa']],
+      ['overallResult', 'gpa', 'grade', 'cgpa']
+    );
+    if (gpaEl) tryFill(gpaEl, gpaVal);
+
+    // 19. Skills - (Type to Add Skills Multiselect Prompt)
+    const skillsInput = document.querySelector('input[data-automation-id*="skills"], input[data-automation-id*="skill"], [data-automation-id*="skillsPrompt"] input, [data-automation-id*="formField-skills"] input, [data-automation-id*="skills-prompt"] input') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('skills') || (l.innerText || '').toLowerCase().includes('type to add skills'))?.closest('div')?.querySelector('input') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('skills') || (l.innerText || '').toLowerCase().includes('type to add skills'))?.parentElement?.querySelector('input');
+
+    if (skillsInput) {
+      let skillsList = [];
+      if (profile.skills) {
+        if (Array.isArray(profile.skills)) skillsList = profile.skills;
+        else if (typeof profile.skills === 'string') skillsList = profile.skills.split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+      }
+
+      if (skillsList.length === 0) {
+        skillsList = ['Network Engineering', 'Cisco', 'Routing & Switching', 'TCP/IP', 'Linux', 'Python', 'Firewalls', 'Network Security'];
+      }
+
+      (async () => {
+        for (const sk of skillsList.slice(0, 8)) {
+          skillsInput.focus();
+          setNativeValue(skillsInput, sk);
+          skillsInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+          skillsInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+
+          await new Promise(r => setTimeout(r, 350));
+          const promptOpts = Array.from(document.querySelectorAll('[role="option"], [data-automation-id*="promptOption"], [data-automation-id*="menu-item"]'));
+          const match = promptOpts.find(o => (o.innerText || '').toLowerCase().includes(sk.toLowerCase())) || promptOpts[0];
+          if (match) {
+            match.click();
+            await new Promise(r => setTimeout(r, 200));
+          }
+        }
+      })();
+      filledCount++;
     }
 
     // ==========================================
@@ -567,7 +647,7 @@
   function matchFieldCategory(ctx, el) {
     const type = (el.type || '').toLowerCase();
 
-    // Specific type checks first
+    // 1. Specific type checks first
     if (type === 'email' || ctx.includes('email') || ctx.includes('e-mail') || ctx.includes('email address')) {
       return 'email';
     }
@@ -575,7 +655,47 @@
       return 'phone';
     }
 
-    // Workday Latin vs Non-Latin / Arabic separation
+    // 2. Education & Skills Guard (Check before names!)
+    if (ctx.includes('skill') || ctx.includes('skills') || ctx.includes('type to add skills')) {
+      return 'skills';
+    }
+    if (ctx.includes('field of study') || ctx.includes('major') || ctx.includes('discipline')) {
+      return 'fieldOfStudy';
+    }
+    if (ctx.includes('highest degree') || ctx.includes('education level') || (ctx.includes('degree') && !ctx.includes('agree'))) {
+      return 'degree';
+    }
+    if (ctx.includes('university') || ctx.includes('school') || ctx.includes('college') || ctx.includes('institution') || ctx.includes('schoolname')) {
+      return 'university';
+    }
+    if (ctx.includes('gpa') || ctx.includes('overall result') || ctx.includes('grade') || ctx.includes('cgpa')) {
+      return 'gpa';
+    }
+    if (ctx.includes('graduation year') || ctx.includes('grad year') || ctx.includes('year of graduation')) {
+      return 'gradYear';
+    }
+
+    // 3. Work Experience & Role Guard
+    if (ctx.includes('role description') || ctx.includes('job description') || ctx.includes('responsibilities') || ctx.includes('work experience')) {
+      return 'roleDescription';
+    }
+    if (ctx.includes('current title') || ctx.includes('recent title') || ctx.includes('job title') || ctx.includes('position title')) {
+      return 'currentTitle';
+    }
+    if (ctx.includes('current company') || ctx.includes('current employer') || ctx.includes('recent employer') || ctx.includes('company name')) {
+      return 'currentCompany';
+    }
+    if (ctx.includes('years of experience') || ctx.includes('total experience') || ctx.includes('how many years')) {
+      return 'experience';
+    }
+    if (ctx.includes('notice period') || ctx.includes('availability') || ctx.includes('start date')) {
+      return 'noticePeriod';
+    }
+    if (ctx.includes('desired salary') || ctx.includes('expected salary') || ctx.includes('salary expectation')) {
+      return 'salary';
+    }
+
+    // 4. Workday Latin vs Non-Latin / Arabic separation
     const isArabic = ctx.includes('arabic');
     if (isArabic) {
       if (ctx.includes('given') || ctx.includes('first')) return 'arabicFirstName';
@@ -583,39 +703,46 @@
       return null;
     }
 
+    // 5. Personal Names (Guarded against school/company)
     if (
-      ctx.includes('given name') ||
-      ctx.includes('first name') ||
-      ctx.includes('fname') ||
-      ctx.includes('firstname') ||
-      ctx.includes('first_name') ||
-      (ctx.includes('latin script') && ctx.includes('given')) ||
-      ctx.includes('legalnamesection_firstname') ||
-      ctx.includes('legalnamesection_givenname')
+      !ctx.includes('school') && !ctx.includes('company') && !ctx.includes('degree') &&
+      (
+        ctx.includes('given name') ||
+        ctx.includes('first name') ||
+        ctx.includes('fname') ||
+        ctx.includes('firstname') ||
+        ctx.includes('first_name') ||
+        (ctx.includes('latin script') && ctx.includes('given')) ||
+        ctx.includes('legalnamesection_firstname') ||
+        ctx.includes('legalnamesection_givenname')
+      )
     ) {
       return 'firstName';
     }
 
     if (
-      ctx.includes('family name') ||
-      ctx.includes('last name') ||
-      ctx.includes('lname') ||
-      ctx.includes('familyname') ||
-      ctx.includes('surname') ||
-      ctx.includes('lastname') ||
-      ctx.includes('last_name') ||
-      (ctx.includes('latin script') && ctx.includes('family')) ||
-      ctx.includes('legalnamesection_lastname') ||
-      ctx.includes('legalnamesection_familyname')
+      !ctx.includes('school') && !ctx.includes('company') && !ctx.includes('degree') &&
+      (
+        ctx.includes('family name') ||
+        ctx.includes('last name') ||
+        ctx.includes('lname') ||
+        ctx.includes('familyname') ||
+        ctx.includes('surname') ||
+        ctx.includes('lastname') ||
+        ctx.includes('last_name') ||
+        (ctx.includes('latin script') && ctx.includes('family')) ||
+        ctx.includes('legalnamesection_lastname') ||
+        ctx.includes('legalnamesection_familyname')
+      )
     ) {
       return 'lastName';
     }
 
-    if ((ctx.includes('full name') || ctx.includes('candidate name') || ctx.includes('your name')) && !ctx.includes('first') && !ctx.includes('last') && !ctx.includes('company')) {
+    if ((ctx.includes('full name') || ctx.includes('candidate name') || ctx.includes('your name')) && !ctx.includes('first') && !ctx.includes('last') && !ctx.includes('company') && !ctx.includes('school')) {
       return 'fullName';
     }
 
-    // URLs
+    // 6. URLs
     if (ctx.includes('linkedin') || ctx.includes('linked-in') || ctx.includes('linkedin.com')) {
       return 'linkedinUrl';
     }
@@ -626,7 +753,7 @@
       return 'portfolioUrl';
     }
 
-    // Location
+    // 7. Location
     if (ctx.includes('addresssection_city') || ctx.includes('city') || ctx.includes('town')) {
       return 'city';
     }
@@ -640,7 +767,7 @@
       return 'zipCode';
     }
 
-    // Work Authorization & Sponsorship
+    // 8. Work Authorization & Sponsorship
     if (ctx.includes('authorized to work') || ctx.includes('legally authorized') || ctx.includes('right to work')) {
       return 'workAuth';
     }
@@ -648,35 +775,7 @@
       return 'sponsorship';
     }
 
-    // Experience & Role
-    if (ctx.includes('years of experience') || ctx.includes('total experience') || ctx.includes('how many years')) {
-      return 'experience';
-    }
-    if (ctx.includes('current title') || ctx.includes('recent title') || ctx.includes('current role') || ctx.includes('job title')) {
-      return 'currentTitle';
-    }
-    if (ctx.includes('current company') || ctx.includes('current employer') || ctx.includes('recent employer')) {
-      return 'currentCompany';
-    }
-    if (ctx.includes('notice period') || ctx.includes('availability') || ctx.includes('start date')) {
-      return 'noticePeriod';
-    }
-    if (ctx.includes('desired salary') || ctx.includes('expected salary') || ctx.includes('salary expectation')) {
-      return 'salary';
-    }
-
-    // Education
-    if (ctx.includes('highest degree') || ctx.includes('education level') || ctx.includes('degree')) {
-      return 'degree';
-    }
-    if (ctx.includes('university') || ctx.includes('school') || ctx.includes('college') || ctx.includes('institution')) {
-      return 'university';
-    }
-    if (ctx.includes('graduation year') || ctx.includes('grad year') || ctx.includes('year of graduation')) {
-      return 'gradYear';
-    }
-
-    // EEO / Diversity
+    // 9. EEO / Diversity
     if (ctx.includes('gender') || ctx.includes('sex')) {
       return 'gender';
     }

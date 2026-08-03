@@ -540,8 +540,11 @@ Return ONLY this JSON structure (fill empty string "" if not found):
   "currentCompany": "",
   "currentTitle": "",
   "highestDegree": "",
+  "fieldOfStudy": "",
   "university": "",
   "graduationYear": "",
+  "gpa": "",
+  "skills": [],
   "totalYearsExperience": 0,
   "summary": ""
 }
@@ -609,8 +612,11 @@ async function extractProfileFromCV(provider, apiKey, cvText, customModel = '', 
     currentCompany:       parsed.currentCompany || '',
     currentTitle:         parsed.currentTitle   || '',
     highestDegree:        parsed.highestDegree  || '',
+    fieldOfStudy:         parsed.fieldOfStudy   || '',
     university:           parsed.university     || '',
     graduationYear:       parsed.graduationYear || '',
+    gpa:                  parsed.gpa            || '',
+    skills:               Array.isArray(parsed.skills) ? parsed.skills : (parsed.skills ? String(parsed.skills).split(/[,;]+/).map(s => s.trim()).filter(Boolean) : []),
     totalYearsExperience: parseInt(parsed.totalYearsExperience, 10) || 0,
     summary:              parsed.summary || '',
   };
