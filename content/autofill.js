@@ -140,13 +140,22 @@
   // WORKDAY DEDICATED SAFE AUTOFILL ENGINE
   // ============================================================
 
+  function hasTrueAriaPopup(el) {
+    if (!el) return false;
+    const val = (el.getAttribute('aria-haspopup') || '').toLowerCase();
+    return val === 'true' || val === 'listbox' || val === 'dialog' || val === 'menu';
+  }
+
   function findWorkdayInput(labelSets, automationKeywords, excludeKeywords = []) {
     // 1. Try finding input by data-automation-id (on element or container)
     for (const auto of automationKeywords) {
-      const el = document.querySelector(`input[data-automation-id*="${auto}"]:not([type="hidden"])`) ||
-                 document.querySelector(`[data-automation-id*="${auto}"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])`);
-      if (el && !el.disabled && !el.readOnly && el.getAttribute('role') !== 'combobox' && !el.getAttribute('aria-haspopup')) {
-        return el;
+      const candidates = Array.from(document.querySelectorAll(
+        `input[data-automation-id*="${auto}"]:not([type="hidden"]), [data-automation-id*="${auto}"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])`
+      ));
+      for (const el of candidates) {
+        if (!el.disabled && !el.readOnly && el.getAttribute('role') !== 'combobox' && !hasTrueAriaPopup(el)) {
+          return el;
+        }
       }
     }
 
@@ -171,7 +180,7 @@
             input = lbl.nextElementSibling.querySelector('input:not([type="hidden"])') ||
                     (lbl.nextElementSibling.tagName === 'INPUT' ? lbl.nextElementSibling : null);
           }
-          if (input && !input.disabled && !input.readOnly && input.getAttribute('role') !== 'combobox' && !input.getAttribute('aria-haspopup')) {
+          if (input && !input.disabled && !input.readOnly && input.getAttribute('role') !== 'combobox' && !hasTrueAriaPopup(input)) {
             return input;
           }
         }
@@ -194,11 +203,21 @@
       return false;
     };
 
+    const getProfileVal = (...keys) => {
+      for (const k of keys) {
+        if (profile[k] && String(profile[k]).trim() !== '') return String(profile[k]).trim();
+      }
+      return '';
+    };
+
     // 1. Given Name (Latin Script)
-    const firstName = profile.firstName || (profile.fullName ? profile.fullName.trim().split(/\s+/)[0] : '');
+    let firstName = getProfileVal('firstName', 'givenName', 'fname');
+    if (!firstName && profile.fullName) {
+      firstName = profile.fullName.trim().split(/\s+/)[0];
+    }
     if (firstName) {
       const el = findWorkdayInput(
-        [['given', 'latin'], ['first', 'latin'], ['given name']],
+        [['given', 'latin'], ['first', 'latin'], ['given name'], ['given']],
         ['legalNameSection_firstName', 'legalNameSection_givenName', 'givenName', 'firstName'],
         ['arabic']
       );
@@ -206,10 +225,13 @@
     }
 
     // 2. Family Name (Latin Script)
-    const lastName = profile.lastName || (profile.fullName ? profile.fullName.trim().split(/\s+/).slice(1).join(' ') : '');
+    let lastName = getProfileVal('lastName', 'familyName', 'lname', 'surname');
+    if (!lastName && profile.fullName) {
+      lastName = profile.fullName.trim().split(/\s+/).slice(1).join(' ');
+    }
     if (lastName) {
       const el = findWorkdayInput(
-        [['family', 'latin'], ['last', 'latin'], ['family name']],
+        [['family', 'latin'], ['last', 'latin'], ['family name'], ['family']],
         ['legalNameSection_lastName', 'legalNameSection_familyName', 'familyName', 'lastName'],
         ['arabic']
       );
@@ -217,36 +239,38 @@
     }
 
     // 3. Address Line 1
-    const address = profile.address || profile.streetAddress || profile.city || '';
+    const address = getProfileVal('address', 'addressLine1', 'streetAddress', 'city');
     if (address) {
       const el = findWorkdayInput(
-        [['address line 1'], ['street address'], ['address']],
-        ['addressSection_addressLine1', 'addressLine1', 'streetAddress']
+        [['address line 1'], ['street address'], ['address line'], ['address']],
+        ['addressSection_addressLine1', 'addressLine1', 'streetAddress'],
+        ['country', 'state', 'city', 'postal']
       );
       tryFill(el, address);
     }
 
     // 4. City
-    if (profile.city) {
+    const city = getProfileVal('city', 'town', 'municipality');
+    if (city) {
       const el = findWorkdayInput(
         [['city'], ['town']],
         ['addressSection_city', 'city']
       );
-      tryFill(el, profile.city);
+      tryFill(el, city);
     }
 
     // 5. Postal / Zip Code
-    const zip = profile.zip || profile.zipCode || profile.postalCode || '';
+    const zip = getProfileVal('zipCode', 'zip', 'postalCode', 'postal');
     if (zip) {
       const el = findWorkdayInput(
         [['postal code'], ['zip code'], ['postal'], ['zip']],
-        ['addressSection_postalCode', 'postalCode', 'zipCode']
+        ['addressSection_postalCode', 'postalCode', 'zipCode', 'postal']
       );
       tryFill(el, zip);
     }
 
     // 6. Phone Number
-    const phone = profile.phone || profile.phoneNumber || profile.mobile || '';
+    const phone = getProfileVal('phone', 'phoneNumber', 'mobile');
     if (phone) {
       const el = findWorkdayInput(
         [['phone number'], ['mobile phone'], ['phone']],
@@ -257,16 +281,17 @@
     }
 
     // 7. Email Address
-    if (profile.email) {
+    const email = getProfileVal('email', 'emailAddress');
+    if (email) {
       const el = findWorkdayInput(
         [['email address'], ['email']],
         ['email', 'emailAddress']
       );
-      tryFill(el, profile.email);
+      tryFill(el, email);
     }
 
     // 8. Online Profiles / URLs
-    const linkedin = profile.linkedinUrl || profile.linkedin || '';
+    const linkedin = getProfileVal('linkedinUrl', 'linkedin');
     if (linkedin) {
       const el = findWorkdayInput(
         [['linkedin']],
@@ -275,7 +300,7 @@
       tryFill(el, linkedin);
     }
 
-    const github = profile.githubUrl || profile.github || '';
+    const github = getProfileVal('githubUrl', 'github');
     if (github) {
       const el = findWorkdayInput(
         [['github']],
@@ -284,7 +309,7 @@
       tryFill(el, github);
     }
 
-    const portfolio = profile.portfolioUrl || profile.portfolio || profile.website || '';
+    const portfolio = getProfileVal('portfolioUrl', 'portfolio', 'website');
     if (portfolio) {
       const el = findWorkdayInput(
         [['website'], ['portfolio']],
@@ -570,94 +595,99 @@
   // ============================================================
 
   function injectFloatingWidget() {
-    if (document.getElementById('jobfit-floating-pill')) return;
+    let pill = document.getElementById('jobfit-floating-pill');
+    if (!pill) {
+      const hasApplicationContext =
+        document.querySelector('.jobs-easy-apply-modal, .jobs-apply-button, form, #job-application, .application-form, [data-view-name="job-details"]') ||
+        window.location.href.includes('easy-apply') ||
+        window.location.href.includes('greenhouse.io') ||
+        window.location.href.includes('lever.co') ||
+        window.location.href.includes('myworkdayjobs.com') ||
+        window.location.href.includes('ashbyhq.com');
 
-    // Only inject if there's a visible form or application modal
-    const hasApplicationContext =
-      document.querySelector('.jobs-easy-apply-modal, .jobs-apply-button, form, #job-application, .application-form, [data-view-name="job-details"]') ||
-      window.location.href.includes('easy-apply') ||
-      window.location.href.includes('greenhouse.io') ||
-      window.location.href.includes('lever.co') ||
-      window.location.href.includes('myworkdayjobs.com') ||
-      window.location.href.includes('ashbyhq.com');
+      if (!hasApplicationContext) return;
 
-    if (!hasApplicationContext) return;
+      pill = document.createElement('div');
+      pill.id = 'jobfit-floating-pill';
+      pill.innerHTML = `
+        <div class="jobfit-pill-btn" id="jobfitPillBtn" title="Autofill Application Form with JobFit Pro">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>⚡ Autofill Form</span>
+        </div>
+        <div class="jobfit-pill-toast" id="jobfitPillToast" style="display:none;"></div>
+      `;
 
-    const pill = document.createElement('div');
-    pill.id = 'jobfit-floating-pill';
-    pill.innerHTML = `
-      <div class="jobfit-pill-btn" id="jobfitPillBtn" title="Autofill Application Form with JobFit Pro">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span>⚡ Autofill Form</span>
-      </div>
-      <div class="jobfit-pill-toast" id="jobfitPillToast" style="display:none;"></div>
-    `;
-
-    // Inject styles
-    const style = document.createElement('style');
-    style.textContent = `
-      #jobfit-floating-pill {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 9999999;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-      .jobfit-pill-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: linear-gradient(135deg, #6c63ff, #7c3aed);
-        color: #ffffff;
-        padding: 10px 18px;
-        border-radius: 30px;
-        font-size: 13px;
-        font-weight: 700;
-        cursor: pointer;
-        box-shadow: 0 6px 20px rgba(108, 99, 255, 0.45);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        transition: all 0.2s ease;
-        user-select: none;
-      }
-      .jobfit-pill-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px rgba(108, 99, 255, 0.6);
-      }
-      .jobfit-pill-btn:active {
-        transform: translateY(0);
-      }
-      .jobfit-pill-toast {
-        position: absolute;
-        bottom: 48px;
-        right: 0;
-        background: rgba(13, 15, 23, 0.95);
-        color: #4ade80;
-        border: 1px solid rgba(34, 197, 94, 0.35);
-        padding: 8px 14px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 600;
-        white-space: nowrap;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-      }
-    `;
-
-    document.head.appendChild(style);
-    document.body.appendChild(pill);
-
-    // Event listener for floating button
-    document.getElementById('jobfitPillBtn').addEventListener('click', async () => {
-      const data = await chrome.storage.local.get(['userProfile']);
-      if (!data.userProfile) {
-        showPillToast('⚠️ Please configure Profile in Settings first!', true);
-        return;
+      if (!document.getElementById('jobfit-pill-style')) {
+        const style = document.createElement('style');
+        style.id = 'jobfit-pill-style';
+        style.textContent = `
+          #jobfit-floating-pill {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999999;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          }
+          .jobfit-pill-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #6c63ff, #7c3aed);
+            color: #ffffff;
+            padding: 10px 18px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(108, 99, 255, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.2s ease;
+            user-select: none;
+          }
+          .jobfit-pill-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(108, 99, 255, 0.6);
+          }
+          .jobfit-pill-btn:active {
+            transform: translateY(0);
+          }
+          .jobfit-pill-toast {
+            position: absolute;
+            bottom: 48px;
+            right: 0;
+            background: rgba(13, 15, 23, 0.95);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.35);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+          }
+        `;
+        document.head.appendChild(style);
       }
 
-      const result = await autofillForm(data.userProfile);
-      showPillToast(result.message || `✨ Filled ${result.count} fields!`);
-    });
+      document.body.appendChild(pill);
+    }
+
+    const btn = document.getElementById('jobfitPillBtn');
+    if (btn) {
+      btn.onclick = async () => {
+        const data = await chrome.storage.local.get(['userProfile']);
+        if (!data.userProfile) {
+          showPillToast('⚠️ Candidate Profile is empty! Open Settings to fill.', true);
+          return;
+        }
+
+        const runner = window.__jobFitAutofillForm || autofillForm;
+        const result = await runner(data.userProfile);
+        showPillToast(result.message || `✨ Filled ${result.count} fields!`);
+      };
+    }
   }
 
   function showPillToast(msg, isError = false) {
