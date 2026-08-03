@@ -137,7 +137,7 @@
   }
 
   // ============================================================
-  // WORKDAY DEDICATED SAFE AUTOFILL ENGINE
+  // WORKDAY DEDICATED SAFE AUTOFILL ENGINE (Multi-Step & Tabs)
   // ============================================================
 
   function hasTrueAriaPopup(el) {
@@ -146,11 +146,11 @@
     return val === 'true' || val === 'listbox' || val === 'dialog' || val === 'menu';
   }
 
-  function findWorkdayInput(labelSets, automationKeywords, excludeKeywords = []) {
-    // 1. Try finding input by data-automation-id (on element or container)
+  function findWorkdayElement(labelSets, automationKeywords, excludeKeywords = []) {
+    // 1. Try finding by data-automation-id (on element or container)
     for (const auto of automationKeywords) {
       const candidates = Array.from(document.querySelectorAll(
-        `input[data-automation-id*="${auto}"]:not([type="hidden"]), [data-automation-id*="${auto}"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])`
+        `input[data-automation-id*="${auto}"]:not([type="hidden"]), textarea[data-automation-id*="${auto}"], select[data-automation-id*="${auto}"], [data-automation-id*="${auto}"] input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), [data-automation-id*="${auto}"] textarea, [data-automation-id*="${auto}"] select`
       ));
       for (const el of candidates) {
         if (!el.disabled && !el.readOnly && el.getAttribute('role') !== 'combobox' && !hasTrueAriaPopup(el)) {
@@ -159,8 +159,8 @@
       }
     }
 
-    // 2. Try finding input by label text & wrapping form fields
-    const labels = Array.from(document.querySelectorAll('label, [data-automation-id*="formField"], [class*="formField"]'));
+    // 2. Try finding by label text & wrapping form fields
+    const labels = Array.from(document.querySelectorAll('label, [data-automation-id*="formField"], [class*="formField"], .form-group'));
     for (const lbl of labels) {
       const txt = (lbl.innerText || '').toLowerCase();
       if (excludeKeywords.some(ex => txt.includes(ex.toLowerCase()))) continue;
@@ -168,20 +168,20 @@
       for (const set of labelSets) {
         const matches = set.every(k => txt.includes(k.toLowerCase()));
         if (matches) {
-          let input = null;
+          let el = null;
           if (lbl.htmlFor) {
-            input = document.getElementById(lbl.htmlFor);
+            el = document.getElementById(lbl.htmlFor);
           }
-          if (!input) {
-            input = lbl.querySelector('input:not([type="hidden"])') ||
-                    lbl.closest('[data-automation-id*="formField"], [class*="formField"], .form-group, div')?.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])');
+          if (!el) {
+            el = lbl.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select') ||
+                 lbl.closest('[data-automation-id*="formField"], [class*="formField"], .form-group, div')?.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select');
           }
-          if (!input && lbl.nextElementSibling) {
-            input = lbl.nextElementSibling.querySelector('input:not([type="hidden"])') ||
-                    (lbl.nextElementSibling.tagName === 'INPUT' ? lbl.nextElementSibling : null);
+          if (!el && lbl.nextElementSibling) {
+            el = lbl.nextElementSibling.querySelector('input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select') ||
+                 (['INPUT', 'TEXTAREA', 'SELECT'].includes(lbl.nextElementSibling.tagName) ? lbl.nextElementSibling : null);
           }
-          if (input && !input.disabled && !input.readOnly && input.getAttribute('role') !== 'combobox' && !hasTrueAriaPopup(input)) {
-            return input;
+          if (el && !el.disabled && !el.readOnly && el.getAttribute('role') !== 'combobox' && !hasTrueAriaPopup(el)) {
+            return el;
           }
         }
       }
@@ -195,9 +195,16 @@
 
     const tryFill = (input, val) => {
       if (input && val && (!input.value || input.value.trim() === '')) {
-        if (setNativeValue(input, val)) {
-          filledCount++;
-          return true;
+        if (input.tagName === 'SELECT') {
+          if (setSelectOption(input, val)) {
+            filledCount++;
+            return true;
+          }
+        } else {
+          if (setNativeValue(input, val)) {
+            filledCount++;
+            return true;
+          }
         }
       }
       return false;
@@ -210,13 +217,17 @@
       return '';
     };
 
+    // ==========================================
+    // STEP 1: PERSONAL INFORMATION (My Information)
+    // ==========================================
+
     // 1. Given Name (Latin Script)
     let firstName = getProfileVal('firstName', 'givenName', 'fname');
     if (!firstName && profile.fullName) {
       firstName = profile.fullName.trim().split(/\s+/)[0];
     }
     if (firstName) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['given', 'latin'], ['first', 'latin'], ['given name'], ['given']],
         ['legalNameSection_firstName', 'legalNameSection_givenName', 'givenName', 'firstName'],
         ['arabic']
@@ -230,7 +241,7 @@
       lastName = profile.fullName.trim().split(/\s+/).slice(1).join(' ');
     }
     if (lastName) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['family', 'latin'], ['last', 'latin'], ['family name'], ['family']],
         ['legalNameSection_lastName', 'legalNameSection_familyName', 'familyName', 'lastName'],
         ['arabic']
@@ -241,7 +252,7 @@
     // 3. Address Line 1
     const address = getProfileVal('address', 'addressLine1', 'streetAddress', 'city');
     if (address) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['address line 1'], ['street address'], ['address line'], ['address']],
         ['addressSection_addressLine1', 'addressLine1', 'streetAddress'],
         ['country', 'state', 'city', 'postal']
@@ -252,7 +263,7 @@
     // 4. City
     const city = getProfileVal('city', 'town', 'municipality');
     if (city) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['city'], ['town']],
         ['addressSection_city', 'city']
       );
@@ -262,7 +273,7 @@
     // 5. Postal / Zip Code
     const zip = getProfileVal('zipCode', 'zip', 'postalCode', 'postal');
     if (zip) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['postal code'], ['zip code'], ['postal'], ['zip']],
         ['addressSection_postalCode', 'postalCode', 'zipCode', 'postal']
       );
@@ -272,7 +283,7 @@
     // 6. Phone Number
     const phone = getProfileVal('phone', 'phoneNumber', 'mobile');
     if (phone) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['phone number'], ['mobile phone'], ['phone']],
         ['phone-number', 'phoneNumber', 'multimedia-phone-number'],
         ['device', 'country code', 'extension']
@@ -283,7 +294,7 @@
     // 7. Email Address
     const email = getProfileVal('email', 'emailAddress');
     if (email) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['email address'], ['email']],
         ['email', 'emailAddress']
       );
@@ -293,7 +304,7 @@
     // 8. Online Profiles / URLs
     const linkedin = getProfileVal('linkedinUrl', 'linkedin');
     if (linkedin) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['linkedin']],
         ['linkedin', 'LinkedIn']
       );
@@ -302,7 +313,7 @@
 
     const github = getProfileVal('githubUrl', 'github');
     if (github) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['github']],
         ['github', 'GitHub']
       );
@@ -311,11 +322,184 @@
 
     const portfolio = getProfileVal('portfolioUrl', 'portfolio', 'website');
     if (portfolio) {
-      const el = findWorkdayInput(
+      const el = findWorkdayElement(
         [['website'], ['portfolio']],
         ['website', 'portfolio']
       );
       tryFill(el, portfolio);
+    }
+
+    // ==========================================
+    // STEP 2: WORK EXPERIENCE & EDUCATION (My Experience)
+    // ==========================================
+
+    // 9. Work Experience - Job Title
+    const jobTitle = getProfileVal('currentTitle', 'jobTitle', 'title', 'experienceTitle');
+    if (jobTitle) {
+      const el = findWorkdayElement(
+        [['job title'], ['title'], ['position'], ['role title']],
+        ['jobTitle', 'job-title', 'title', 'position', 'jobTitle_0']
+      );
+      tryFill(el, jobTitle);
+    }
+
+    // 10. Work Experience - Company
+    const company = getProfileVal('currentCompany', 'company', 'employer', 'organization');
+    if (company) {
+      const el = findWorkdayElement(
+        [['company'], ['employer'], ['organization'], ['company name']],
+        ['company', 'companyName', 'employer', 'company_0']
+      );
+      tryFill(el, company);
+    }
+
+    // 11. Work Experience - Location
+    const jobLocation = getProfileVal('city', 'location', 'state');
+    if (jobLocation) {
+      const el = findWorkdayElement(
+        [['location'], ['job location']],
+        ['location', 'jobLocation', 'location_0'],
+        ['country', 'postal']
+      );
+      tryFill(el, jobLocation);
+    }
+
+    // 12. "I currently work here" (Checkbox)
+    const currentJobCheck = document.querySelector('input[type="checkbox"][data-automation-id*="currentlyWorkHere"], input[type="checkbox"][data-automation-id*="currentJob"]') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('currently work here'))?.querySelector('input[type="checkbox"]') ||
+      Array.from(document.querySelectorAll('label')).find(l => (l.innerText || '').toLowerCase().includes('currently work here'))?.closest('div')?.querySelector('input[type="checkbox"]');
+
+    if (currentJobCheck && !currentJobCheck.checked) {
+      currentJobCheck.checked = true;
+      currentJobCheck.dispatchEvent(new Event('change', { bubbles: true }));
+      currentJobCheck.dispatchEvent(new Event('input', { bubbles: true }));
+      filledCount++;
+    }
+
+    // 13. Work Experience - Dates (From / To)
+    const fromDate = getProfileVal('jobStartDate', 'startDate', 'fromYear') || '01/2022';
+    const toDate = getProfileVal('jobEndDate', 'endDate', 'toYear') || '08/2026';
+    const fromEl = findWorkdayElement([['from']], ['startDate', 'jobStartDate', 'fromDate'], ['school', 'education']);
+    if (fromEl) tryFill(fromEl, fromDate);
+    const toEl = findWorkdayElement([['to']], ['endDate', 'jobEndDate', 'toDate'], ['school', 'education', 'hear']);
+    if (toEl && (!currentJobCheck || !currentJobCheck.checked)) tryFill(toEl, toDate);
+
+    // 14. Work Experience - Role Description (Textarea)
+    const roleDesc = getProfileVal('roleDescription', 'experienceSummary', 'summary') ||
+      (jobTitle ? `Experienced ${jobTitle} with a proven track record of designing, deploying, and maintaining high-performance infrastructure and delivering reliable solutions.` : '');
+    if (roleDesc) {
+      const el = findWorkdayElement(
+        [['role description'], ['job description'], ['description'], ['responsibilities'], ['summary']],
+        ['jobDescription', 'roleDescription', 'description', 'responsibilities', 'workExperience']
+      );
+      tryFill(el, roleDesc);
+    }
+
+    // 14. Education - School / University
+    const school = getProfileVal('university', 'school', 'institution', 'college');
+    if (school) {
+      const el = findWorkdayElement(
+        [['school'], ['university'], ['institution'], ['college']],
+        ['school', 'university', 'institution', 'college', 'education']
+      );
+      tryFill(el, school);
+    }
+
+    // 15. Education - Degree
+    const degree = getProfileVal('degree', 'highestDegree', 'education');
+    if (degree) {
+      const el = findWorkdayElement(
+        [['degree'], ['highest degree'], ['degree level'], ['education level']],
+        ['degree', 'degreeName', 'highestDegree', 'educationLevel']
+      );
+      tryFill(el, degree);
+    }
+
+    // 16. Education - Field of Study / Major
+    const major = getProfileVal('fieldOfStudy', 'major', 'discipline');
+    if (major) {
+      const el = findWorkdayElement(
+        [['field of study'], ['major'], ['discipline'], ['area of study']],
+        ['fieldOfStudy', 'major', 'discipline']
+      );
+      tryFill(el, major);
+    }
+
+    // 17. Education - Graduation Year / To
+    const gradYear = getProfileVal('gradYear', 'graduationYear', 'year');
+    if (gradYear) {
+      const el = findWorkdayElement(
+        [['graduation year'], ['grad year'], ['year of graduation'], ['year']],
+        ['gradYear', 'graduationYear', 'year']
+      );
+      tryFill(el, gradYear);
+    }
+
+    // 18. Education - Overall Result / GPA
+    const gpa = getProfileVal('gpa', 'overallResult', 'grade');
+    if (gpa) {
+      const el = findWorkdayElement(
+        [['overall result'], ['gpa'], ['grade'], ['cgpa']],
+        ['overallResult', 'gpa', 'grade', 'cgpa']
+      );
+      tryFill(el, gpa);
+    }
+
+    // ==========================================
+    // STEP 3 & 4: APPLICATION QUESTIONS (Work Auth, Sponsorship, etc.)
+    // ==========================================
+
+    // 19. Notice Period
+    const notice = getProfileVal('noticePeriod', 'notice');
+    if (notice) {
+      const el = findWorkdayElement(
+        [['notice period'], ['notice']],
+        ['noticePeriod', 'notice']
+      );
+      tryFill(el, notice);
+    }
+
+    // 20. Expected Salary
+    const salary = getProfileVal('salary', 'expectedSalary', 'compensation');
+    if (salary) {
+      const el = findWorkdayElement(
+        [['salary'], ['expected salary'], ['compensation']],
+        ['salary', 'expectedSalary', 'compensation']
+      );
+      tryFill(el, salary);
+    }
+
+    // 21. Total Years of Experience
+    const exp = getProfileVal('experience', 'yearsExperience', 'totalExperience');
+    if (exp) {
+      const el = findWorkdayElement(
+        [['years of experience'], ['total experience'], ['experience']],
+        ['experience', 'yearsExperience']
+      );
+      tryFill(el, exp);
+    }
+
+    // 22. Generic fallback for any remaining unfilled inputs/textareas
+    const remainingInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), textarea, select')).filter(el => {
+      if (!el || el.disabled || el.readOnly || isComplexPromptWidget(el)) return false;
+      const type = (el.type || '').toLowerCase();
+      if (['submit', 'button', 'file', 'image', 'reset'].includes(type)) return false;
+      return (!el.value || el.value.trim() === '');
+    });
+
+    for (const el of remainingInputs) {
+      try {
+        const ctx = getElementContext(el);
+        const category = matchFieldCategory(ctx, el);
+        if (category && profile[category]) {
+          const val = profile[category];
+          if (el.tagName === 'SELECT') {
+            if (setSelectOption(el, val)) filledCount++;
+          } else {
+            if (setNativeValue(el, val)) filledCount++;
+          }
+        }
+      } catch (_) {}
     }
 
     return filledCount;
